@@ -11,5 +11,8 @@ urlpatterns = [
     path("logIn/", LoginAPIView.as_view(), name="login"),
 
     # 토큰 재발급하기
-    path('logIn/refresh/', TokenRefreshView.as_view())
+    path('logIn/refresh/', TokenRefreshView.as_view()),
+
+    # 로그아웃
+    path('logOut/', LogoutAPIView.as_view(), name='logout'),
 ]
