@@ -5,4 +5,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('interview_questions/', include('QuestionList.urls')),
     path('users/', include('Users.urls')),
+    path('interview/', include('InterviewAnalyze.urls')),
+
 ]
