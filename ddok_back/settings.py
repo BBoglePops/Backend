@@ -26,7 +26,7 @@ os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = GOOGLE_APPLICATION_CREDENTIALS
 
 # SECRET_KEY = get_env_variable('DJANGO_SECRET')
 
-secret_file = os.path.join(BASE_DIR, 'secrets.json')
+# secret_file = os.path.join(BASE_DIR, 'secrets.json')
 
 # SECRET_KEY를 환경 변수에서 가져오기
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
@@ -50,23 +50,30 @@ if not SECRET_KEY:
 
 # SECRET_KEY = get_secret("SECRET_KEY")
 
-# JSON 파일 경로 설정
-secret_file = os.path.join(BASE_DIR, 'openapi.json')
+# # JSON 파일 경로 설정
+# secret_file = os.path.join(BASE_DIR, 'openapi.json')
 
-# JSON 파일에서 설정 로드
-with open(secret_file) as f:
-    secrets = json.load(f)
+# # JSON 파일에서 설정 로드
+# with open(secret_file) as f:
+#     secrets = json.load(f)
 
-def get_secret(setting, secrets=secrets):
-    """비밀 설정을 가져오거나 명시적 예외를 반환"""
-    try:
-        return secrets[setting]
-    except KeyError:
-        error_msg = f"Set the {setting} environment variable"
-        raise ImproperlyConfigured(error_msg)
+# def get_secret(setting, secrets=secrets):
+#     """비밀 설정을 가져오거나 명시적 예외를 반환"""
+#     try:
+#         return secrets[setting]
+#     except KeyError:
+#         error_msg = f"Set the {setting} environment variable"
+#         raise ImproperlyConfigured(error_msg)
 
-# API 키 설정
-OPENAI_API_KEY = get_secret("OPENAI_API_KEY")
+# # API 키 설정
+# OPENAI_API_KEY = get_secret("OPENAI_API_KEY")
+
+# SECRET_KEY를 환경 변수에서 가져오기
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+
+# 환경 변수에서 가져온 SECRET_KEY가 없으면 예외 발생
+if not OPENAI_API_KEY:
+    raise ImproperlyConfigured("Set the OPENAI_API_KEY environment variable")
 
 
 # Quick-start development settings - unsuitable for production
