@@ -28,19 +28,27 @@ os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = GOOGLE_APPLICATION_CREDENTIALS
 
 secret_file = os.path.join(BASE_DIR, 'secrets.json')
 
-with open(secret_file) as f:
-    secrets = json.loads(f.read())
+# SECRET_KEY를 환경 변수에서 가져오기
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
 
-def get_secret(setting):
-    """비밀 변수를 가져오거나 명시적 예외를 반환한다."""
-    try:
-        return secrets[setting]
-    except KeyError:
-        error_msg = "Set the {} environment variable".format(setting)
-        raise ImproperlyConfigured(error_msg)
+# 환경 변수에서 가져온 SECRET_KEY가 없으면 예외 발생
+if not SECRET_KEY:
+    raise ImproperlyConfigured("Set the DJANGO_SECRET_KEY environment variable")
 
 
-SECRET_KEY = get_secret("SECRET_KEY")
+# with open(secret_file) as f:
+#     secrets = json.loads(f.read())
+
+# def get_secret(setting):
+#     """비밀 변수를 가져오거나 명시적 예외를 반환한다."""
+#     try:
+#         return secrets[setting]
+#     except KeyError:
+#         error_msg = "Set the {} environment variable".format(setting)
+#         raise ImproperlyConfigured(error_msg)
+
+
+# SECRET_KEY = get_secret("SECRET_KEY")
 
 # JSON 파일 경로 설정
 secret_file = os.path.join(BASE_DIR, 'openapi.json')
