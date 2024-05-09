@@ -46,7 +46,7 @@ coverage.xml
 
 # Developers
 *.sw*
-manage.py
+
 .DS_Store
 
 # example database
@@ -55,3 +55,6 @@ drf_example
 secrets.json
 openapi.json
 sttapi.json
+
+.env/
+.env

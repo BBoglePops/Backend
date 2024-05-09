@@ -16,9 +16,8 @@ class InterviewAnalysis(models.Model):
     response_9 = models.TextField(blank=True, null=True)
     response_10 = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    redundant_expressions = models.TextField(blank=True, null=True)
-    inappropriate_terms = models.TextField(blank=True, null=True)
-
 
     def __str__(self):
         return f'Responses for {self.question_list.id}'
+    
+
