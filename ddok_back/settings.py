@@ -14,8 +14,13 @@ from django.core.exceptions import ImproperlyConfigured
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Google Cloud 자격 증명 파일 경로
-GOOGLE_APPLICATION_CREDENTIALS = os.path.join(BASE_DIR, 'sttapi.json')
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = GOOGLE_APPLICATION_CREDENTIALS
+
+GOOGLE_APPLICATION_CREDENTIALS = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+if not GOOGLE_APPLICATION_CREDENTIALS:
+    raise ImproperlyConfigured("GOOGLE_APPLICATION_CREDENTIALS environment variable not set")
+
+# GOOGLE_APPLICATION_CREDENTIALS = os.path.join(BASE_DIR, 'sttapi.json')
+# os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = GOOGLE_APPLICATION_CREDENTIALS
 # def get_env_variable(var_name):
 #     """환경 변수를 가져오거나 명시적 예외를 반환한다."""
 #     try:
