@@ -1,13 +1,14 @@
-# views.py 수정
-import re
-import random
-import requests
 from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from .models import QuestionLists, ProblemSolvingQuestion, CommunicationSkillQuestion, GrowthPotentialQuestion, PersonalityTraitQuestion
+import random
+import requests
+import logging
+
+logger = logging.getLogger(__name__)
 
 class ChatGPTView(APIView):
     permission_classes = [IsAuthenticated]
@@ -30,11 +31,11 @@ class ChatGPTView(APIView):
             )
             response.raise_for_status()
             job_related_questions = response.json().get('choices')[0].get('message').get('content').splitlines()
-            job_related_questions = [re.sub(r'^\d+\.\s*', '', q).strip() for q in job_related_questions if q.strip()]
+            job_related_questions = [q.strip() for q in job_related_questions if q.strip()]
         except requests.exceptions.RequestException as e:
             return Response({"error": f"서버 오류: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        all_questions = job_related_questions[:]
+        all_questions = job_related_questions[:10]  # Ensure only 10 questions are selected initially
 
         category_models = {
             'problem_solving': ProblemSolvingQuestion,
@@ -50,12 +51,11 @@ class ChatGPTView(APIView):
                 random_questions = random.sample(questions, min(len(questions), 2))
                 all_questions.extend(random_questions)
 
-        if len(all_questions) > 10:
-            all_questions = random.sample(all_questions, 10)
+        all_questions = random.sample(all_questions, 10)  # Shuffle and pick only 10 questions overall
 
         question_list = QuestionLists(user=request.user)
         for i, question in enumerate(all_questions, 1):
             setattr(question_list, f'question_{i}', question)
         question_list.save()
 
-        return Response({"questions": all_questions}, status=status.HTTP_201_CREATED)
+        return Response({"id": question_list.id, "questions": all_questions}, status=status.HTTP_201_CREATED)
