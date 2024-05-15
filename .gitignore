@@ -58,3 +58,4 @@ sttapi.json
 
 .env/
 .env
+db.sqlite3
