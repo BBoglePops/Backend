@@ -24,7 +24,7 @@ class ChatGPTView(APIView):
             return Response({"error": "분야와 직무 입력은 필수입니다."}, status=status.HTTP_400_BAD_REQUEST)
 
         # OpenAI API 요청을 위한 입력값 수정
-        modified_input = f"{user_input_field}분야의 {user_input_job}직무와 관련된 면접 질문 10가지 리스트업해줘 질문 번호 없이 질문 텍스트만 뽑아줘 한국어로"
+        modified_input = f"{user_input_field}분야의 {user_input_job}직무와 관련된 면접 질문 10가지 리스트업해줘 한국어로"
         try:
             # OpenAI API 호출
             response = requests.post(
@@ -66,7 +66,9 @@ class ChatGPTView(APIView):
         question_list = QuestionLists(user=request.user)
         # 질문을 question_1 ~ question_10 속성에 할당
         for i, question in enumerate(all_questions, 1):
-            setattr(question_list, f'question_{i}', question)
+            # 질문 번호 제거
+            question_text = question.split('.', 1)[-1].strip() if '.' in question else question
+            setattr(question_list, f'question_{i}', question_text)
         question_list.save()
 
         # 질문을 정렬된 순서로 반환
