@@ -7,6 +7,7 @@ from .models import InterviewAnalysis, QuestionLists  # InterviewAnalysis 및 Qu
 import os  # OS 모듈을 가져옵니다.
 from django.conf import settings  # Django 설정을 가져옵니다.
 import logging  # 로깅 모듈을 가져옵니다.
+import requests  # HTTP 요청을 위해 requests 모듈을 가져옵니다.
 
 logger = logging.getLogger(__name__)  # 로거를 설정합니다.
 
@@ -42,11 +43,15 @@ class ResponseAPIView(APIView):
             return Response({"error": "Required file not found"}, status=500)  # 오류 응답을 반환합니다.
 
         response_data = []  # 응답 데이터를 저장할 리스트를 초기화합니다.
+        all_responses = ""  # 전체 응답을 저장할 문자열을 초기화합니다.
         for i in range(1, 11):
             question_key = f'question_{i}'
             response_key = f'response_{i}'
             question_text = getattr(question_list, question_key, None)  # 질문 텍스트를 가져옵니다.
             response_text = getattr(interview_response, response_key, None)  # 응답 텍스트를 가져옵니다.
+
+            if response_text:
+                all_responses += f"{response_text}\n"  # 전체 응답에 추가합니다.
 
             found_redundant = [expr for expr in redundant_expressions if expr in response_text]  # 응답에서 잉여 표현을 찾습니다.
             corrections = {}
@@ -65,7 +70,23 @@ class ResponseAPIView(APIView):
                 'corrected_response': corrected_text
             })  # 응답 데이터를 구성합니다.
 
+        # GPT API 호출을 통해 총평 받기
+        prompt = f"다음은 사용자의 면접 응답입니다:\n{all_responses}\n\n응답이 직무연관성, 문제해결력, 의사소통능력, 성장가능성, 인성과 관련하여 적절했는지 300자 내외로 총평을 작성해줘."
+        try:
+            response = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
+                json={"model": "gpt-3.5-turbo-0125", "messages": [{"role": "user", "content": prompt}]},
+                timeout=10
+            )
+            response.raise_for_status()
+            gpt_feedback = response.json().get('choices')[0].get('message').get('content')
+        except requests.exceptions.RequestException as e:
+            logger.error(f"GPT API request failed: {e}")
+            gpt_feedback = "총평을 가져오는 데 실패했습니다."
+
         return Response({
             'interview_id': interview_response.id,
-            'responses': response_data
+            'responses': response_data,
+            'gpt_feedback': gpt_feedback
         }, status=200)  # 응답 데이터를 반환합니다.
