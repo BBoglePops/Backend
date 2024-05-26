@@ -112,6 +112,9 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
 	'rest_framework_simplejwt.token_blacklist',
     'InterviewAnalyze',
+    'myLog',
+    'Eyetrack',
+
 ]
 
 MIDDLEWARE = [
@@ -233,3 +236,22 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # settings.py
 AUTH_USER_MODEL = 'Users.User'
+
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'level': 'DEBUG',  # 정보량 조절을 위해 DEBUG, INFO, WARNING 등으로 설정할 수 있습니다.
+        },
+    },
+    'loggers': {
+        '': {  # 루트 로거 설정으로 모든 로그를 캡처
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+    },
+}
