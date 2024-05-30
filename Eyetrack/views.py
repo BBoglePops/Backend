@@ -8,13 +8,9 @@ import base64
 import io
 from PIL import Image
 import numpy as np
-<<<<<<< HEAD
 from rest_framework.permissions import IsAuthenticated
 
 permission_classes = [IsAuthenticated]
-=======
-
->>>>>>> 2445661764a85acfc40336f8a8d1c3926f17eb64
 # 전역 변수 선언
 gaze_session = GazeTrackingSession()
 
