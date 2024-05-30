@@ -19,11 +19,9 @@ class ResponseAPIView(APIView):
         question_list = get_object_or_404(QuestionLists, id=question_list_id)
         interview_response = InterviewAnalysis(question_list=question_list)
 
-        
         # 로그인한 사용자를 user 필드에 할당
         interview_response.user = request.user
 
-        
         base_dir = settings.BASE_DIR
         redundant_expressions_path = os.path.join(base_dir, 'InterviewAnalyze', 'redundant_expressions.txt')
         inappropriate_terms_path = os.path.join(base_dir, 'InterviewAnalyze', 'inappropriate_terms.txt')
