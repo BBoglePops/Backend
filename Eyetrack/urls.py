@@ -5,3 +5,6 @@ urlpatterns = [
     path('start/', start_gaze_tracking_view, name='start_gaze_tracking'),
     path('stop/', stop_gaze_tracking_view, name='stop-gaze-tracking'),
 ]
+
+
+# start/{user_id}/{interview_id}
