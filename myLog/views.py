@@ -35,3 +35,19 @@ class MyInterviewDetailView(APIView):
         }
 
         return Response(response_data, status=200)
+
+
+class MyInterviewListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, user_id):
+        if request.user.id != user_id:
+            return Response({"error": "You are not authorized to view these interviews."}, status=403)
+
+        interviews = InterviewAnalysis.objects.filter(user_id=user_id).order_by('-created_at')
+        response_data = [{
+            "id": interview.id,
+            "created_at": interview.created_at
+        } for interview in interviews]
+
+        return Response(response_data, status=200)
