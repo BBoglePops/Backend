@@ -2,7 +2,7 @@ from django.urls import path
 from .views import * 
 from rest_framework_simplejwt.views import TokenRefreshView
 
-
+# user의 urls.py
 urlpatterns = [
     # 회원가입
     path("signUp/", SignupAPIView.as_view(), name="signup"),
