@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from InterviewAnalyze.models import InterviewAnalysis
 from django.contrib.auth.models import User
+from Eyetrack.models import GazeTrackingResult
 
 class MyInterviewDetailView(APIView):
     permission_classes = [IsAuthenticated]
@@ -49,5 +50,25 @@ class MyInterviewListView(APIView):
             "id": interview.id,
             "created_at": interview.created_at
         } for interview in interviews]
+
+        return Response(response_data, status=200)
+
+class GazeTrackingResultView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, user_id, interview_id):
+        if request.user.id != user_id:
+            return Response({"error": "You are not authorized to view this gaze tracking result."}, status=403)
+
+        try:
+            gaze_tracking_result = GazeTrackingResult.objects.get(user_id=user_id, interview_id=interview_id)
+        except GazeTrackingResult.DoesNotExist:
+            raise Http404("No GazeTrackingResult found matching the criteria.")
+
+        response_data = {
+            "id": interview_id,
+            "image_data": gaze_tracking_result.encoded_image,
+            "feedback": gaze_tracking_result.feedback
+        }
 
         return Response(response_data, status=200)

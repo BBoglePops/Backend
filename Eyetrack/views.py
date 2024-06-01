@@ -12,10 +12,14 @@ from rest_framework.permissions import IsAuthenticated
 
 permission_classes = [IsAuthenticated]
 # 전역 변수 선언
-gaze_session = GazeTrackingSession()
+gaze_sessions = {}
 
-def start_gaze_tracking_view(request):
-    gaze_session.start_eye_tracking()  # 시선 추적 시작
+def start_gaze_tracking_view(request, user_id, interview_id):
+    # user_id와 interview_id를 키로 사용하여 세션 관리
+    key = f"{user_id}_{interview_id}"
+    if key not in gaze_sessions:
+        gaze_sessions[key] = GazeTrackingSession()
+    gaze_sessions[key].start_eye_tracking()
     return JsonResponse({"message": "Gaze tracking started"}, status=200)
 
 def apply_gradient(center, radius, color, image, text=None):
@@ -77,8 +81,12 @@ def draw_heatmap(image, section_counts):
                 radius = 100  # 모든 원의 반지름을 일정하게 설정
                 apply_gradient(center, radius, color, image, number)
 
-def stop_gaze_tracking_view(request):
-    csv_filename = gaze_session.stop_eye_tracking()  # 섹션 및 횟수를 저장하고 시선 추적 종료
+def stop_gaze_tracking_view(request, user_id, interview_id):
+    key = f"{user_id}_{interview_id}"
+    if key not in gaze_sessions:
+        return JsonResponse({"message": "Session not found"}, status=404)
+
+    csv_filename = gaze_sessions[key].stop_eye_tracking()  # 섹션 및 횟수를 저장하고 시선 추적 종료
     section_data = pd.read_csv(csv_filename)
     section_counts = dict(zip(section_data["Section"], section_data["Count"]))
 
@@ -105,9 +113,13 @@ def stop_gaze_tracking_view(request):
 
     # GazeTrackingResult 모델에 이미지 데이터 저장
     gaze_tracking_result = GazeTrackingResult.objects.create(
+        user_id=user_id,
+        interview_id=interview_id,
         encoded_image=encoded_image_string,
         feedback=feedback  # 피드백 저장
     )
+    
+    del gaze_sessions[key]
 
     return JsonResponse({
         "message": "Gaze tracking stopped",

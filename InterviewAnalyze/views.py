@@ -9,6 +9,8 @@ from django.conf import settings
 import logging
 import requests
 
+
+
 # 이서 import 항목
 from google.cloud import speech
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -422,3 +424,6 @@ class VoiceAPIView(APIView):
             pitch_message = "말씀하시는 속도가 조금 빠른 편입니다. 천천히 말하면 면접관이 더 잘 이해할 수 있고, 자신감 있는 모습을 보일 수 있습니다. 천천히 말하는 연습을 통해 전달력을 높여 보세요."
 
         return pitch_result, intensity_result, pitch_graph_base64, intensity_graph_base64, intensity_message, pitch_message
+    
+
+
