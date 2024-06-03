@@ -238,6 +238,12 @@ class VoiceAPIView(APIView):
         }, status=200)
 
     def handle_audio_analysis(self, request):
+        question_list_id = request.data.get('question_list_id')
+        if not question_list_id:
+            return Response({"error": "question_list_id is required"}, status=400)
+
+        question_list = get_object_or_404(QuestionLists, id=question_list_id)
+        
         try:
             # 오디오 파일 확인
             audio_files = [request.FILES.get(f'audio_{i}') for i in range(1, 11) if request.FILES.get(f'audio_{i}')]
@@ -259,6 +265,7 @@ class VoiceAPIView(APIView):
             # 인터뷰 응답 객체 생성 및 저장
             interview_response = InterviewAnalysis(
                 user=request.user,
+                question_list=question_list,
                 pronunciation_similarity=str(pronunciation_result),
                 pitch_analysis=str(pitch_result),
                 intensity_analysis=str(intensity_result),
