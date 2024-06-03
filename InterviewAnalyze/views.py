@@ -29,8 +29,11 @@ import re
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 import nltk
+import matplotlib
+matplotlib.use('Agg')  # 백엔드를 Agg로 설정
 
 logger = logging.getLogger(__name__)
+
 
 # 답변 스크립트 분석
 class ResponseAPIView(APIView):
@@ -123,6 +126,12 @@ class ResponseAPIView(APIView):
 # 여기서부터 이서코드
 nltk.download('punkt') # 1회만 다운로드 하면댐
 
+def set_korean_font():
+    # 프로젝트 디렉토리 내에 있는 나눔고딕 폰트 경로 설정
+    font_path = os.path.join(settings.BASE_DIR, 'fonts', 'NanumGothic.ttf')
+    font_prop = fm.FontProperties(fname=font_path)
+    plt.rc('font', family=font_prop.get_name())
+
 credentials = service_account.Credentials.from_service_account_file(
     os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 ) 
@@ -130,6 +139,24 @@ credentials = service_account.Credentials.from_service_account_file(
 class VoiceAPIView(APIView):
     parser_classes = [MultiPartParser, FormParser]
     permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # 현재 로그인한 사용자의 인터뷰 분석 결과를 조회
+        interview_responses = InterviewAnalysis.objects.filter(user=request.user).order_by('-created_at')
+        data = []
+        for interview in interview_responses:
+            data.append({
+                'interview_id': interview.id,
+                'pronunciation_similarity': interview.pronunciation_similarity,
+                'pitch_analysis': interview.pitch_analysis,
+                'intensity_analysis': interview.intensity_analysis,
+                'pronunciation_message': interview.pronunciation_message,
+                'pitch_message': interview.pitch_message,
+                'intensity_message': interview.intensity_message,
+                'created_at': interview.created_at,
+                'updated_at': interview.updated_at,
+            })
+        return Response(data, status=200)
 
     def post(self, request, question_list_id=None):
         if question_list_id:
@@ -139,8 +166,8 @@ class VoiceAPIView(APIView):
 
     def handle_response_analysis(self, request, question_list_id):
         question_list = get_object_or_404(QuestionLists, id=question_list_id)
-        interview_response = InterviewAnalysis(question_list=question_list)
-        
+        interview_response = InterviewAnalysis(question_list=question_list, user=request.user)
+
         client = speech.SpeechClient(credentials=credentials)
         config = RecognitionConfig(
             encoding=speech.RecognitionConfig.AudioEncoding.MP3,
@@ -190,9 +217,12 @@ class VoiceAPIView(APIView):
             pitch_result, intensity_result, pitch_graph_base64, intensity_graph_base64, intensity_message, pitch_message = self.analyze_pitch(audio_file_path)
 
             # 분석 결과를 인터뷰 응답 객체에 저장
-            interview_response.pronunciation_similarity = pronunciation_result
-            interview_response.pitch_analysis = pitch_result
-            interview_response.intensity_analysis = intensity_result
+            interview_response.pronunciation_similarity = str(pronunciation_result)
+            interview_response.pitch_analysis = str(pitch_result)
+            interview_response.intensity_analysis = str(intensity_result)
+            interview_response.pronunciation_message = pronunciation_message
+            interview_response.pitch_message = pitch_message
+            interview_response.intensity_message = intensity_message
 
         interview_response.save()
 
@@ -226,8 +256,21 @@ class VoiceAPIView(APIView):
             # 피치 분석 결과 가져오기
             pitch_result, intensity_result, pitch_graph_base64, intensity_graph_base64, intensity_message, pitch_message = self.analyze_pitch(combined_audio_path)
 
+            # 인터뷰 응답 객체 생성 및 저장
+            interview_response = InterviewAnalysis(
+                user=request.user,
+                pronunciation_similarity=str(pronunciation_result),
+                pitch_analysis=str(pitch_result),
+                intensity_analysis=str(intensity_result),
+                pronunciation_message=pronunciation_message,
+                pitch_message=pitch_message,
+                intensity_message=intensity_message
+            )
+            interview_response.save()
+
             # JSON 형식의 결과 반환
             return Response({
+                "interview_id": interview_response.id,
                 "pronunciation_similarity": pronunciation_result,
                 "highest_confidence_text": highest_confidence_text,
                 "average_similarity": average_similarity,
@@ -331,6 +374,8 @@ class VoiceAPIView(APIView):
 
     def analyze_pitch(self, audio_file_path):
         """음성 파일의 피치 분석을 수행하고 그래프를 생성합니다."""
+        set_korean_font()  # 한글 폰트 설정
+
         sound = parselmouth.Sound(audio_file_path)
 
         pitch = sound.to_pitch()
@@ -352,7 +397,7 @@ class VoiceAPIView(APIView):
         ax1.plot(pitch_times / 60, np.where((pitch_values < 150) | (pitch_values > 500), pitch_values, np.nan), 'o', markersize=2, color='red', label='범위 밖')
         ax1.set_xlabel('시간(분)')
         ax1.set_ylabel('피치(Hz)')
-        ax1.set_title('Pitch')
+        ax1.set_title('피치')
         ax1.set_xlim([0, max(pitch_times / 60)])
         ax1.set_ylim([0, 500])
         ax1.grid(True)
@@ -374,7 +419,7 @@ class VoiceAPIView(APIView):
         ax2.plot(intensity_times / 60, np.where((intensity_values < 35) | (intensity_values > 65), intensity_values, np.nan), linewidth=1, color='red', label='범위 밖')
         ax2.set_xlabel('시간(분)')
         ax2.set_ylabel('강도(dB)')
-        ax2.set_title('Intensity')
+        ax2.set_title('강도')
         ax2.set_xlim([0, max(intensity_times / 60)])
         ax2.set_ylim([0, max(intensity_values)])
         ax2.grid(True)
@@ -424,6 +469,3 @@ class VoiceAPIView(APIView):
             pitch_message = "말씀하시는 속도가 조금 빠른 편입니다. 천천히 말하면 면접관이 더 잘 이해할 수 있고, 자신감 있는 모습을 보일 수 있습니다. 천천히 말하는 연습을 통해 전달력을 높여 보세요."
 
         return pitch_result, intensity_result, pitch_graph_base64, intensity_graph_base64, intensity_message, pitch_message
-    
-
-

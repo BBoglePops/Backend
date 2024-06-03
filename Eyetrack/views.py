@@ -1,7 +1,28 @@
+# from django.shortcuts import render
+# from django.http import JsonResponse
+# from .main import GazeTrackingSession
+# from .models import GazeTrackingResult, Video
+# import cv2
+# import pandas as pd
+# import base64
+# import io
+# from PIL import Image
+# import numpy as np
+# from rest_framework.permissions import IsAuthenticated
+
+
+# # 프론트로부터 받아오는 Video 처리 관련
+# from rest_framework.views import APIView
+# from rest_framework.response import Response
+# from rest_framework import status
+# from rest_framework.parsers import MultiPartParser, FormParser
+# from .serializers import VideoSerializer
+
+
 from django.shortcuts import render
 from django.http import JsonResponse
 from .main import GazeTrackingSession
-from .models import GazeTrackingResult
+from .models import *
 import cv2
 import pandas as pd
 import base64
@@ -9,6 +30,12 @@ import io
 from PIL import Image
 import numpy as np
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.parsers import MultiPartParser, FormParser
+from .serializers import VideoSerializer
+
 
 permission_classes = [IsAuthenticated]
 # 전역 변수 선언
@@ -126,3 +153,18 @@ def stop_gaze_tracking_view(request, user_id, interview_id):
         "image_data": gaze_tracking_result.encoded_image,
         "feedback": feedback
     }, status=200)
+
+
+
+# 프론트로부터 받아오는 Video 처리 관련
+class VideoUploadView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = (MultiPartParser, FormParser)
+
+    def post(self, request, *args, **kwargs):
+        file_serializer = VideoSerializer(data=request.data)
+        if file_serializer.is_valid():
+            file_serializer.save()
+            return Response(file_serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            return Response(file_serializer.errors, status=status.HTTP_400_BAD_REQUEST)

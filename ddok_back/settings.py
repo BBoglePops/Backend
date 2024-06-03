@@ -134,6 +134,9 @@ REST_FRAMEWORK = { # 추가
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',  #인증된 회원만 액세스 허용
         'rest_framework.permissions.AllowAny',         #모든 회원 액세스 허용
+        'rest_framework.parsers.JSONParser',
+        'rest_framework.parsers.FormParser',
+        'rest_framework.parsers.MultiPartParser',
     ],
     'DEFAULT_AUTHENTICATION_CLASSES': ( #api가 실행됬을 때 인증할 클래스 - Simple JWT 사용
          'rest_framework_simplejwt.authentication.JWTAuthentication', #이와 같이 추가

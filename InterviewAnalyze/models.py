@@ -69,6 +69,16 @@ class InterviewAnalysis(models.Model):
     # 인터뷰 전체에 대한 총평을 저장할 필드 추가
     overall_feedback = models.TextField(blank=True, null=True)
 
+
+    # 이서 필드
+    # 음성 분석 결과 저장을 위한 필드 추가
+    pronunciation_similarity = models.TextField(null=True, blank=True)
+    pitch_analysis = models.TextField(null=True, blank=True)
+    intensity_analysis = models.TextField(null=True, blank=True)
+    pronunciation_message = models.TextField(null=True, blank=True)
+    pitch_message = models.TextField(null=True, blank=True)
+    intensity_message = models.TextField(null=True, blank=True)
+    
     created_at = models.DateTimeField(auto_now_add=True)  # 생성 시각 자동 저장
 
     def __str__(self):

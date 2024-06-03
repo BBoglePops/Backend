@@ -72,3 +72,31 @@ class GazeTrackingResultView(APIView):
         }
 
         return Response(response_data, status=200)
+    
+
+# 이서코드
+class MyVoiceAnalysisDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, user_id, analysis_id):
+        if request.user.id != user_id:
+            return Response({"error": "You are not authorized to view this analysis."}, status=403)
+
+        try:
+            analysis = InterviewAnalysis.objects.get(id=analysis_id, user_id=user_id)
+        except InterviewAnalysis.DoesNotExist:
+            raise Http404("No Voice Analysis found matching the criteria.")
+
+        response_data = {
+            "id": analysis.id,
+            "pronunciation_similarity": analysis.pronunciation_similarity,
+            "pitch_analysis": analysis.pitch_analysis,
+            "intensity_analysis": analysis.intensity_analysis,
+            "pronunciation_message": analysis.pronunciation_message,
+            "pitch_message": analysis.pitch_message,
+            "intensity_message": analysis.intensity_message,
+            "created_at": analysis.created_at,
+            "updated_at": analysis.updated_at,
+        }
+
+        return Response(response_data, status=200)
