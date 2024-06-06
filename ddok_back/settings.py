@@ -123,15 +123,13 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
+    
 ]
 
-CSRF_COOKIE_HTTPONLY = False
 
 REST_FRAMEWORK = { # 추가
     'DEFAULT_PERMISSION_CLASSES': [
@@ -262,6 +260,3 @@ LOGGING = {
     },
 }
 
-CSRF_TRUSTED_ORIGINS = [
-    'http://localhost:5173',  # 프론트엔드 애플리케이션의 URL
-]

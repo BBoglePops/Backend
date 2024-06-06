@@ -16,16 +16,11 @@ from rest_framework.response import Response
 from rest_framework import status
 from .serializers import VideoSerializer
 from django.conf import settings
-from django.views.decorators.csrf import csrf_exempt
-from django.utils.decorators import method_decorator
 
 permission_classes = [IsAuthenticated]
-# 전역 변수 선언
 gaze_sessions = {}
 
-@csrf_exempt
 def start_gaze_tracking_view(request, user_id, interview_id):
-    # user_id와 interview_id를 키로 사용하여 세션 관리
     key = f"{user_id}_{interview_id}"
     if key not in gaze_sessions:
         gaze_sessions[key] = GazeTrackingSession()
@@ -37,7 +32,7 @@ def start_gaze_tracking_view(request, user_id, interview_id):
 
 def apply_gradient(center, radius, color, image, text=None):
     overlay = image.copy()
-    cv2.circle(overlay, center, radius, color, -1)  # 원
+    cv2.circle(overlay, center, radius, color, -1)
     cv2.addWeighted(overlay, 0.5, image, 0.5, 0, image)
     if text is not None:
         font = cv2.FONT_HERSHEY_SIMPLEX
@@ -91,45 +86,39 @@ def draw_heatmap(image, section_counts):
                 center = section_centers[section]
                 color = color_map[section]
                 number = number_map[section]
-                radius = 700  # 모든 원의 반지름을 일정하게 설정
+                radius = 700
                 apply_gradient(center, radius, color, image, number)
 
-@csrf_exempt
 def stop_gaze_tracking_view(request, user_id, interview_id):
     key = f"{user_id}_{interview_id}"
     if key not in gaze_sessions:
         return JsonResponse({"message": "Session not found"}, status=404)
 
-    csv_filename = gaze_sessions[key].stop_eye_tracking()  # 섹션 및 횟수를 저장하고 시선 추적 종료
+    csv_filename = gaze_sessions[key].stop_eye_tracking()
     section_data = pd.read_csv(csv_filename)
     section_counts = dict(zip(section_data["Section"], section_data["Count"]))
 
     image_path = "C:/KJE/IME_graduation/Backend-main/Backend-main/Eyetrack/0518/image.png"
-    original_image = cv2.imread(image_path)  # 이미지 로드
+    original_image = cv2.imread(image_path)
 
     if original_image is None:
         return JsonResponse({"message": "Image not found"}, status=404)
 
-    # heatmap 그리기
     heatmap_image = original_image.copy()
     draw_heatmap(heatmap_image, section_counts)
 
-    # 이미지를 base64로 인코딩하여 문자열로 변환
     _, buffer = cv2.imencode('.png', heatmap_image)
     encoded_image_string = base64.b64encode(buffer).decode('utf-8')
 
-    # 피드백 생성
     feedback = get_feedback(section_counts)
 
-    # GazeTrackingResult 모델에 이미지 데이터 저장
     gaze_tracking_result = GazeTrackingResult.objects.create(
         user_id=user_id,
         interview_id=interview_id,
         encoded_image=encoded_image_string,
-        feedback=feedback  # 피드백 저장
+        feedback=feedback
     )
     
-    # 업로드된 비디오 파일 삭제
     video_path = gaze_sessions[key].video_path
     if os.path.exists(video_path):
         os.remove(video_path)
@@ -142,7 +131,6 @@ def stop_gaze_tracking_view(request, user_id, interview_id):
         "feedback": feedback
     }, status=200)
 
-@method_decorator(csrf_exempt, name='dispatch')
 class VideoUploadView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser)
@@ -155,7 +143,6 @@ class VideoUploadView(APIView):
             interview_id = request.data.get('interview_id')
             video_path = video.file.path
 
-            # 시선 추적 세션 초기화 및 비디오 경로 저장
             key = f"{user_id}_{interview_id}"
             gaze_sessions[key] = GazeTrackingSession()
             gaze_sessions[key].video_path = video_path
