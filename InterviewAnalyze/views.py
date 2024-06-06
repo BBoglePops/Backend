@@ -317,7 +317,7 @@ class VoiceAPIView(APIView):
             combined += audio_segment
         return combined, sample_rate
 
-    def analyze_pronunciation(self, audio_file_path, most_raw_text, highest_confidence_text, question_id=None, sample_rate=None):  # <-- 수정된 부분: question_id와 sample_rate 파라미터 추가
+    def analyze_pronunciation(self, audio_file_path, most_raw_text, highest_confidence_text, question_id=None, sample_rate=None):  
         """음성 파일의 발음 분석을 수행합니다."""
         with open(audio_file_path, 'rb') as audio_file:
             audio_content = audio_file.read()
@@ -325,7 +325,7 @@ class VoiceAPIView(APIView):
         audio = RecognitionAudio(content=audio_content)
         config = RecognitionConfig(
             encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-            sample_rate_hertz=sample_rate,  # <-- 수정된 부분: 동적으로 샘플 속도 설정
+            sample_rate_hertz=sample_rate,  
             language_code='ko-KR',
             enable_automatic_punctuation=True,
             max_alternatives=2  # 2개의 대안을 요청
@@ -336,8 +336,9 @@ class VoiceAPIView(APIView):
         response = operation.result(timeout=90)
 
         # 첫 번째 대안은 가장 확신도가 높은 텍스트, 두 번째 대안은 가장 원시적인 텍스트로 사용
-        highest_confidence_text = response.results[0].alternatives[0].transcript
-        most_raw_text = response.results[0].alternatives[1].transcript if len(response.results[0].alternatives) > 1 else highest_confidence_text
+        # analyze_pronunciation 메소드 내부
+        highest_confidence_text = response.results[0].alternatives[0].transcript if len(response.results) > 0 and len(response.results[0].alternatives) > 0 else ""
+        most_raw_text = response.results[0].alternatives[1].transcript if len(response.results) > 0 and len(response.results[0].alternatives) > 1 else highest_confidence_text
 
         expected_sentences = re.split(r'[.!?]', most_raw_text)
         received_sentences = re.split(r'[.!?]', highest_confidence_text)
@@ -352,7 +353,7 @@ class VoiceAPIView(APIView):
             num_sentences += 1
             highlighted_received_sentence = self.highlight_differences(expected_sentence.strip(), received_sentence.strip(), similarity)
             pronunciation_result.append({
-                'question_id': question_id,  # <-- 수정된 부분: question_id 추가
+                'question_id': question_id,  # question_id 추가
                 '실제 발음': expected_sentence.strip(),
                 '기대 발음': highlighted_received_sentence,
                 '유사도': similarity
