@@ -125,13 +125,14 @@ class ResponseAPIView(APIView):
 
 # 여기서부터 이서코드
 nltk.download('punkt') # 1회만 다운로드 하면댐
-
+    
 def set_korean_font():
-    # 프로젝트 디렉토리 내에 있는 나눔고딕 폰트 경로 설정
     font_path = os.path.join(settings.BASE_DIR, 'fonts', 'NanumGothic.ttf')
+    if not os.path.isfile(font_path):
+        raise RuntimeError(f"Font file not found: {font_path}")
     font_prop = fm.FontProperties(fname=font_path)
     plt.rc('font', family=font_prop.get_name())
-
+    
 credentials = service_account.Credentials.from_service_account_file(
     os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 ) 
@@ -159,12 +160,13 @@ class VoiceAPIView(APIView):
         return Response(data, status=200)
 
     def post(self, request, question_list_id=None):
+        question_id = request.data.get('question_id')
         if question_list_id:
-            return self.handle_response_analysis(request, question_list_id)
+            return self.handle_response_analysis(request, question_list_id, question_id)  # <-- 수정된 부분: question_id 전달
         else:
             return self.handle_audio_analysis(request)
 
-    def handle_response_analysis(self, request, question_list_id):
+    def handle_response_analysis(self, request, question_list_id, question_id):  # <-- 수정된 부분: question_id 파라미터 추가
         question_list = get_object_or_404(QuestionLists, id=question_list_id)
         interview_response = InterviewAnalysis(question_list=question_list, user=request.user)
 
@@ -173,39 +175,43 @@ class VoiceAPIView(APIView):
             encoding=speech.RecognitionConfig.AudioEncoding.MP3,
             sample_rate_hertz=16000,
             language_code="ko-KR",
-            max_alternatives=2  # 2개의 대안을 요청
+            max_alternatives=2
         )
 
         audio_file_path = None
 
-        for i in range(1, 11):
-            file_key = f'audio_{i}'
-            if file_key not in request.FILES:
-                continue
-
+        file_key = f'audio_{question_id}'  # <-- 수정된 부분: question_id를 사용하여 파일 키 생성
+        if file_key in request.FILES:
             audio_file = request.FILES[file_key]
             audio_file_path = os.path.join(settings.MEDIA_ROOT, audio_file.name)
             with open(audio_file_path, 'wb') as f:
                 f.write(audio_file.read())
+                
+            audio_segment = AudioSegment.from_file(audio_file_path)
+            sample_rate = audio_segment.frame_rate
+            
+            config = RecognitionConfig(
+                encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+                sample_rate_hertz=sample_rate,  # <-- 수정된 부분: 동적으로 샘플 속도 설정
+                language_code="ko-KR",
+                max_alternatives=2
+            )
 
             audio = RecognitionAudio(content=audio_file.read())
             response = client.recognize(config=config, audio=audio)
             highest_confidence_text = ' '.join([result.alternatives[0].transcript for result in response.results])
             most_raw_text = ' '.join([result.alternatives[1].transcript for result in response.results if len(result.alternatives) > 1])
 
-            setattr(interview_response, f'response_{i}', highest_confidence_text)
+            setattr(interview_response, f'response_{question_id}', highest_confidence_text)
 
-        response_data = []
-        for i in range(1, 11):
-            question_key = f'question_{i}'
-            response_key = f'response_{i}'
-            question_text = getattr(question_list, question_key, None)
-            response_text = getattr(interview_response, response_key, None)
+        question_key = f'question_{question_id}'
+        question_text = getattr(question_list, question_key, None)
+        response_text = getattr(interview_response, f'response_{question_id}', None)
 
-            response_data.append({
-                'question': question_text,
-                'response': response_text,
-            })
+        response_data = {
+            'question': question_text,
+            'response': response_text,
+        }
 
         # 발음 분석 및 피치 분석 수행
         pronunciation_result = None
@@ -213,7 +219,7 @@ class VoiceAPIView(APIView):
         intensity_result = None
 
         if audio_file_path:
-            pronunciation_result, pronunciation_message = self.analyze_pronunciation(audio_file_path, most_raw_text, highest_confidence_text)
+            pronunciation_result, pronunciation_message = self.analyze_pronunciation(audio_file_path, most_raw_text, highest_confidence_text, question_id)  # <-- 수정된 부분: question_id 전달
             pitch_result, intensity_result, pitch_graph_base64, intensity_graph_base64, intensity_message, pitch_message = self.analyze_pitch(audio_file_path)
 
             # 분석 결과를 인터뷰 응답 객체에 저장
@@ -228,7 +234,7 @@ class VoiceAPIView(APIView):
 
         return Response({
             'interview_id': interview_response.id,
-            'responses': response_data,
+            'response': response_data,
             'pronunciation_similarity': pronunciation_result,
             'pitch_analysis': pitch_result,
             'intensity_analysis': intensity_result,
@@ -257,7 +263,7 @@ class VoiceAPIView(APIView):
             combined_audio.export(combined_audio_path, format='wav')
 
             # 발음 분석 결과 가져오기
-            pronunciation_result, highest_confidence_text, average_similarity, pronunciation_message = self.analyze_pronunciation(combined_audio_path, sample_rate)
+            pronunciation_result, highest_confidence_text, average_similarity, pronunciation_message = self.analyze_pronunciation(combined_audio_path, sample_rate, None)  # <-- 수정된 부분: question_id 없음
 
             # 피치 분석 결과 가져오기
             pitch_result, intensity_result, pitch_graph_base64, intensity_graph_base64, intensity_message, pitch_message = self.analyze_pitch(combined_audio_path)
@@ -311,7 +317,7 @@ class VoiceAPIView(APIView):
             combined += audio_segment
         return combined, sample_rate
 
-    def analyze_pronunciation(self, audio_file_path, sample_rate):
+    def analyze_pronunciation(self, audio_file_path, most_raw_text, highest_confidence_text, question_id=None, sample_rate=None):  # <-- 수정된 부분: question_id와 sample_rate 파라미터 추가
         """음성 파일의 발음 분석을 수행합니다."""
         with open(audio_file_path, 'rb') as audio_file:
             audio_content = audio_file.read()
@@ -319,7 +325,7 @@ class VoiceAPIView(APIView):
         audio = RecognitionAudio(content=audio_content)
         config = RecognitionConfig(
             encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-            sample_rate_hertz=sample_rate,
+            sample_rate_hertz=sample_rate,  # <-- 수정된 부분: 동적으로 샘플 속도 설정
             language_code='ko-KR',
             enable_automatic_punctuation=True,
             max_alternatives=2  # 2개의 대안을 요청
@@ -346,6 +352,7 @@ class VoiceAPIView(APIView):
             num_sentences += 1
             highlighted_received_sentence = self.highlight_differences(expected_sentence.strip(), received_sentence.strip(), similarity)
             pronunciation_result.append({
+                'question_id': question_id,  # <-- 수정된 부분: question_id 추가
                 '실제 발음': expected_sentence.strip(),
                 '기대 발음': highlighted_received_sentence,
                 '유사도': similarity
