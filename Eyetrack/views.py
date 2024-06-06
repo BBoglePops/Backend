@@ -16,18 +16,22 @@ from rest_framework.response import Response
 from rest_framework import status
 from .serializers import VideoSerializer
 from django.conf import settings
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 
 permission_classes = [IsAuthenticated]
 # 전역 변수 선언
 gaze_sessions = {}
 
-def start_gaze_tracking_view(request, user_id, interview_id, question_id):
-    key = f"{user_id}_{interview_id}_{question_id}"
+def start_gaze_tracking_view(request, user_id, interview_id):
+    # user_id와 interview_id를 키로 사용하여 세션 관리
+    key = f"{user_id}_{interview_id}"
     if key not in gaze_sessions:
         gaze_sessions[key] = GazeTrackingSession()
     
-    video_path = gaze_sessions[key].video_path
-    gaze_sessions[key].start_eye_tracking(video_path)
+    gaze_session = gaze_sessions[key]
+    video_path = gaze_session.video_path
+    gaze_session.start_eye_tracking(video_path)
     return JsonResponse({"message": "Gaze tracking started"}, status=200)
 
 def apply_gradient(center, radius, color, image, text=None):
@@ -89,8 +93,8 @@ def draw_heatmap(image, section_counts):
                 radius = 700  # 모든 원의 반지름을 일정하게 설정
                 apply_gradient(center, radius, color, image, number)
 
-def stop_gaze_tracking_view(request, user_id, interview_id, question_id):
-    key = f"{user_id}_{interview_id}_{question_id}"
+def stop_gaze_tracking_view(request, user_id, interview_id):
+    key = f"{user_id}_{interview_id}"
     if key not in gaze_sessions:
         return JsonResponse({"message": "Session not found"}, status=404)
 
@@ -119,7 +123,6 @@ def stop_gaze_tracking_view(request, user_id, interview_id, question_id):
     gaze_tracking_result = GazeTrackingResult.objects.create(
         user_id=user_id,
         interview_id=interview_id,
-        question_id=question_id,  # question_id 저장
         encoded_image=encoded_image_string,
         feedback=feedback  # 피드백 저장
     )
@@ -137,6 +140,7 @@ def stop_gaze_tracking_view(request, user_id, interview_id, question_id):
         "feedback": feedback
     }, status=200)
 
+@method_decorator(csrf_exempt, name='dispatch')
 class VideoUploadView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser)
@@ -147,11 +151,10 @@ class VideoUploadView(APIView):
             video = file_serializer.save()
             user_id = request.data.get('user_id')
             interview_id = request.data.get('interview_id')
-            question_id = request.data.get('question_id')  # question_id 받아오기
             video_path = video.file.path
 
             # 시선 추적 세션 초기화 및 비디오 경로 저장
-            key = f"{user_id}_{interview_id}_{question_id}"
+            key = f"{user_id}_{interview_id}"
             gaze_sessions[key] = GazeTrackingSession()
             gaze_sessions[key].video_path = video_path
 

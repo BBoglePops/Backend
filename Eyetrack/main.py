@@ -19,6 +19,7 @@ class GazeTrackingSession:
         self.section = "None"
         self.thread = None
         self.running = False
+        self.video_path = None  # video_path 속성을 초기화
 
     def Section(self, where):
         if where in self.sections:
@@ -33,9 +34,10 @@ class GazeTrackingSession:
         self.thread.daemon = True
         self.thread.start()
 
-    def start_eye_tracking(self, video_path=None):
+    def start_eye_tracking(self, video_path):
         self.running = True
         self.thread = self.Thread_run()
+        self.video_path = video_path
 
         avg_left_hor_gaze = 0
         avg_right_hor_gaze = 0
