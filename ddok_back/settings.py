@@ -128,7 +128,10 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
 ]
+
+CSRF_COOKIE_HTTPONLY = False
 
 REST_FRAMEWORK = { # 추가
     'DEFAULT_PERMISSION_CLASSES': [
