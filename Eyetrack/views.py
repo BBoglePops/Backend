@@ -23,6 +23,7 @@ permission_classes = [IsAuthenticated]
 # 전역 변수 선언
 gaze_sessions = {}
 
+@csrf_exempt
 def start_gaze_tracking_view(request, user_id, interview_id):
     # user_id와 interview_id를 키로 사용하여 세션 관리
     key = f"{user_id}_{interview_id}"
@@ -93,6 +94,7 @@ def draw_heatmap(image, section_counts):
                 radius = 700  # 모든 원의 반지름을 일정하게 설정
                 apply_gradient(center, radius, color, image, number)
 
+@csrf_exempt
 def stop_gaze_tracking_view(request, user_id, interview_id):
     key = f"{user_id}_{interview_id}"
     if key not in gaze_sessions:
