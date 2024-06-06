@@ -258,3 +258,7 @@ LOGGING = {
         },
     },
 }
+
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:5173',  # 프론트엔드 애플리케이션의 URL
+]
