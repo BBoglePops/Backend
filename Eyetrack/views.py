@@ -1,52 +1,33 @@
-# from django.shortcuts import render
-# from django.http import JsonResponse
-# from .main import GazeTrackingSession
-# from .models import GazeTrackingResult, Video
-# import cv2
-# import pandas as pd
-# import base64
-# import io
-# from PIL import Image
-# import numpy as np
-# from rest_framework.permissions import IsAuthenticated
-
-
-# # 프론트로부터 받아오는 Video 처리 관련
-# from rest_framework.views import APIView
-# from rest_framework.response import Response
-# from rest_framework import status
-# from rest_framework.parsers import MultiPartParser, FormParser
-# from .serializers import VideoSerializer
-
-
 from django.shortcuts import render
 from django.http import JsonResponse
 from .main import GazeTrackingSession
-from .models import *
+from .models import GazeTrackingResult
 import cv2
 import pandas as pd
 import base64
 import io
 from PIL import Image
 import numpy as np
+import os
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.parsers import MultiPartParser, FormParser
 from .serializers import VideoSerializer
-
+from django.conf import settings
 
 permission_classes = [IsAuthenticated]
 # 전역 변수 선언
 gaze_sessions = {}
 
-def start_gaze_tracking_view(request, user_id, interview_id):
-    # user_id와 interview_id를 키로 사용하여 세션 관리
-    key = f"{user_id}_{interview_id}"
+def start_gaze_tracking_view(request, user_id, interview_id, question_id):
+    key = f"{user_id}_{interview_id}_{question_id}"
     if key not in gaze_sessions:
         gaze_sessions[key] = GazeTrackingSession()
-    gaze_sessions[key].start_eye_tracking()
+    
+    video_path = gaze_sessions[key].video_path
+    gaze_sessions[key].start_eye_tracking(video_path)
     return JsonResponse({"message": "Gaze tracking started"}, status=200)
 
 def apply_gradient(center, radius, color, image, text=None):
@@ -55,9 +36,9 @@ def apply_gradient(center, radius, color, image, text=None):
     cv2.addWeighted(overlay, 0.5, image, 0.5, 0, image)
     if text is not None:
         font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 1
+        font_scale = 30
         font_color = (255, 255, 255)
-        thickness = 2
+        thickness = 10
         text_size = cv2.getTextSize(text, font, font_scale, thickness)[0]
         text_x = center[0] - text_size[0] // 2
         text_y = center[1] + text_size[1] // 2
@@ -105,11 +86,11 @@ def draw_heatmap(image, section_counts):
                 center = section_centers[section]
                 color = color_map[section]
                 number = number_map[section]
-                radius = 100  # 모든 원의 반지름을 일정하게 설정
+                radius = 700  # 모든 원의 반지름을 일정하게 설정
                 apply_gradient(center, radius, color, image, number)
 
-def stop_gaze_tracking_view(request, user_id, interview_id):
-    key = f"{user_id}_{interview_id}"
+def stop_gaze_tracking_view(request, user_id, interview_id, question_id):
+    key = f"{user_id}_{interview_id}_{question_id}"
     if key not in gaze_sessions:
         return JsonResponse({"message": "Session not found"}, status=404)
 
@@ -117,7 +98,7 @@ def stop_gaze_tracking_view(request, user_id, interview_id):
     section_data = pd.read_csv(csv_filename)
     section_counts = dict(zip(section_data["Section"], section_data["Count"]))
 
-    image_path = "C:/KJE/IME_graduation/Back_AI_connect-main/Eyetrack/0518/image.png"
+    image_path = "C:/KJE/IME_graduation/Backend-main/Backend-main/Eyetrack/0518/image.png"
     original_image = cv2.imread(image_path)  # 이미지 로드
 
     if original_image is None:
@@ -134,18 +115,20 @@ def stop_gaze_tracking_view(request, user_id, interview_id):
     # 피드백 생성
     feedback = get_feedback(section_counts)
 
-    # 이미지를 PIL 형식으로 변환하여 화면에 표시
-    heatmap_pil_image = Image.fromarray(cv2.cvtColor(heatmap_image, cv2.COLOR_BGR2RGB))
-    heatmap_pil_image.show()
-
     # GazeTrackingResult 모델에 이미지 데이터 저장
     gaze_tracking_result = GazeTrackingResult.objects.create(
         user_id=user_id,
         interview_id=interview_id,
+        question_id=question_id,  # question_id 저장
         encoded_image=encoded_image_string,
         feedback=feedback  # 피드백 저장
     )
     
+    # 업로드된 비디오 파일 삭제
+    video_path = gaze_sessions[key].video_path
+    if os.path.exists(video_path):
+        os.remove(video_path)
+
     del gaze_sessions[key]
 
     return JsonResponse({
@@ -154,9 +137,6 @@ def stop_gaze_tracking_view(request, user_id, interview_id):
         "feedback": feedback
     }, status=200)
 
-
-
-# 프론트로부터 받아오는 Video 처리 관련
 class VideoUploadView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser)
@@ -164,7 +144,17 @@ class VideoUploadView(APIView):
     def post(self, request, *args, **kwargs):
         file_serializer = VideoSerializer(data=request.data)
         if file_serializer.is_valid():
-            file_serializer.save()
-            return Response(file_serializer.data, status=status.HTTP_201_CREATED)
+            video = file_serializer.save()
+            user_id = request.data.get('user_id')
+            interview_id = request.data.get('interview_id')
+            question_id = request.data.get('question_id')  # question_id 받아오기
+            video_path = video.file.path
+
+            # 시선 추적 세션 초기화 및 비디오 경로 저장
+            key = f"{user_id}_{interview_id}_{question_id}"
+            gaze_sessions[key] = GazeTrackingSession()
+            gaze_sessions[key].video_path = video_path
+
+            return JsonResponse({"message": "Video uploaded successfully"}, status=201)
         else:
-            return Response(file_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return JsonResponse(file_serializer.errors, status=400)
