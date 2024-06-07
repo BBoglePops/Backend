@@ -164,8 +164,6 @@ class VoiceAPIView(APIView):
                 'response_8': interview.response_8,
                 'response_9': interview.response_9,
                 'response_10': interview.response_10,
-                #'created_at': interview.created_at,
-                #'updated_at': interview.updated_at,
             })
         return Response(data, status=200)
 
@@ -271,7 +269,7 @@ class VoiceAPIView(APIView):
             combined_audio.export(combined_audio_path, format='wav')
 
             # 발음 분석 결과 가져오기
-            pronunciation_result, highest_confidence_text, average_similarity, pronunciation_message = self.analyze_pronunciation(combined_audio_path, highest_confidence_text=None, most_raw_text=None, sample_rate=sample_rate)  # question_id 없음
+            pronunciation_result, highest_confidence_text, average_similarity, pronunciation_message = self.analyze_pronunciation(combined_audio_path, sample_rate=sample_rate)
 
             # 피치 분석 결과 가져오기
             pitch_result, intensity_result, pitch_graph_base64, intensity_graph_base64, intensity_message, pitch_message = self.analyze_pitch(combined_audio_path)
