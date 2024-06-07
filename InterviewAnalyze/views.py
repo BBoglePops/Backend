@@ -154,55 +154,64 @@ class VoiceAPIView(APIView):
                 'pronunciation_message': interview.pronunciation_message,
                 'pitch_message': interview.pitch_message,
                 'intensity_message': interview.intensity_message,
-                'created_at': interview.created_at,
-                'updated_at': interview.updated_at,
+                'response_1': interview.response_1,
+                'response_2': interview.response_2,
+                'response_3': interview.response_3,
+                'response_4': interview.response_4,
+                'response_5': interview.response_5,
+                'response_6': interview.response_6,
+                'response_7': interview.response_7,
+                'response_8': interview.response_8,
+                'response_9': interview.response_9,
+                'response_10': interview.response_10,
+                #'created_at': interview.created_at,
+                #'updated_at': interview.updated_at,
             })
         return Response(data, status=200)
 
     def post(self, request, question_list_id=None):
         question_id = request.data.get('question_id')
         if question_list_id:
-            return self.handle_response_analysis(request, question_list_id, question_id)  # <-- 수정된 부분: question_id 전달
+            return self.handle_response_analysis(request, question_list_id, question_id)
         else:
             return self.handle_audio_analysis(request)
 
-    def handle_response_analysis(self, request, question_list_id, question_id):  # <-- 수정된 부분: question_id 파라미터 추가
+    def handle_response_analysis(self, request, question_list_id, question_id):
         question_list = get_object_or_404(QuestionLists, id=question_list_id)
         interview_response = InterviewAnalysis(question_list=question_list, user=request.user)
 
         client = speech.SpeechClient(credentials=credentials)
-        config = RecognitionConfig(
-            encoding=speech.RecognitionConfig.AudioEncoding.MP3,
-            sample_rate_hertz=16000,
-            language_code="ko-KR",
-            max_alternatives=2
-        )
-
         audio_file_path = None
 
-        file_key = f'audio_{question_id}'  # <-- 수정된 부분: question_id를 사용하여 파일 키 생성
+        file_key = f'audio_{question_id}'  # question_id를 사용하여 파일 키 생성
         if file_key in request.FILES:
             audio_file = request.FILES[file_key]
             audio_file_path = os.path.join(settings.MEDIA_ROOT, audio_file.name)
             with open(audio_file_path, 'wb') as f:
                 f.write(audio_file.read())
-                
+
             audio_segment = AudioSegment.from_file(audio_file_path)
             sample_rate = audio_segment.frame_rate
-            
+
             config = RecognitionConfig(
                 encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-                sample_rate_hertz=sample_rate,  # <-- 수정된 부분: 동적으로 샘플 속도 설정
+                sample_rate_hertz=sample_rate,  # 동적으로 샘플링 속도 설정
                 language_code="ko-KR",
                 max_alternatives=2
             )
 
+# 대안 2개 제공받기
             audio = RecognitionAudio(content=audio_file.read())
             response = client.recognize(config=config, audio=audio)
-            highest_confidence_text = ' '.join([result.alternatives[0].transcript for result in response.results])
-            most_raw_text = ' '.join([result.alternatives[1].transcript for result in response.results if len(result.alternatives) > 1])
+            if response.results:
+                highest_confidence_text = ' '.join([result.alternatives[0].transcript for result in response.results if result.alternatives])
+                most_raw_text = ' '.join([result.alternatives[1].transcript for result in response.results if len(result.alternatives) > 1])
+            else:
+                highest_confidence_text = ""
+                most_raw_text = ""
 
-            setattr(interview_response, f'response_{question_id}', highest_confidence_text)
+            highlighted_response = self.highlight_differences(most_raw_text, highest_confidence_text, question_id)  # 하이라이팅된 응답 생성
+            setattr(interview_response, f'response_{question_id}', highlighted_response)  # 하이라이팅된 응답 저장
 
         question_key = f'question_{question_id}'
         question_text = getattr(question_list, question_key, None)
@@ -219,7 +228,7 @@ class VoiceAPIView(APIView):
         intensity_result = None
 
         if audio_file_path:
-            pronunciation_result, pronunciation_message = self.analyze_pronunciation(audio_file_path, most_raw_text, highest_confidence_text, question_id)  # <-- 수정된 부분: question_id 전달
+            pronunciation_result, pronunciation_message = self.analyze_pronunciation(audio_file_path, most_raw_text, highest_confidence_text, question_id)  # question_id 전달
             pitch_result, intensity_result, pitch_graph_base64, intensity_graph_base64, intensity_message, pitch_message = self.analyze_pitch(audio_file_path)
 
             # 분석 결과를 인터뷰 응답 객체에 저장
@@ -242,7 +251,7 @@ class VoiceAPIView(APIView):
             'pitch_message': pitch_message,
             'pronunciation_message': pronunciation_message
         }, status=200)
-
+# 강도&피치
     def handle_audio_analysis(self, request):
         question_list_id = request.data.get('question_list_id')
         if not question_list_id:
@@ -263,7 +272,7 @@ class VoiceAPIView(APIView):
             combined_audio.export(combined_audio_path, format='wav')
 
             # 발음 분석 결과 가져오기
-            pronunciation_result, highest_confidence_text, average_similarity, pronunciation_message = self.analyze_pronunciation(combined_audio_path, sample_rate, None)  # <-- 수정된 부분: question_id 없음
+            pronunciation_result, highest_confidence_text, average_similarity, pronunciation_message = self.analyze_pronunciation(combined_audio_path, sample_rate, None)  # question_id 없음
 
             # 피치 분석 결과 가져오기
             pitch_result, intensity_result, pitch_graph_base64, intensity_graph_base64, intensity_message, pitch_message = self.analyze_pitch(combined_audio_path)
@@ -336,7 +345,6 @@ class VoiceAPIView(APIView):
         response = operation.result(timeout=90)
 
         # 첫 번째 대안은 가장 확신도가 높은 텍스트, 두 번째 대안은 가장 원시적인 텍스트로 사용
-        # analyze_pronunciation 메소드 내부
         highest_confidence_text = response.results[0].alternatives[0].transcript if len(response.results) > 0 and len(response.results[0].alternatives) > 0 else ""
         most_raw_text = response.results[0].alternatives[1].transcript if len(response.results) > 0 and len(response.results[0].alternatives) > 1 else highest_confidence_text
 

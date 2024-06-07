@@ -95,8 +95,8 @@ class MyVoiceAnalysisDetailView(APIView):
             "pronunciation_message": analysis.pronunciation_message,
             "pitch_message": analysis.pitch_message,
             "intensity_message": analysis.intensity_message,
-            "created_at": analysis.created_at,
-            "updated_at": analysis.updated_at,
+            # "created_at": analysis.created_at,
+            # "updated_at": analysis.updated_at,
         }
 
         return Response(response_data, status=200)
