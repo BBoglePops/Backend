@@ -9,6 +9,7 @@ import io
 from PIL import Image
 import numpy as np
 import os
+import logging
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -17,12 +18,15 @@ from rest_framework import status
 from .serializers import VideoSerializer
 from django.conf import settings
 
+logger = logging.getLogger(__name__)
 permission_classes = [IsAuthenticated]
 gaze_sessions = {}
 
 def start_gaze_tracking_view(request, user_id, interview_id, question_id):
     key = f"{user_id}_{interview_id}_{question_id}"
     if key not in gaze_sessions:
+        # Log the missing session
+        logger.warning(f"Session not found for key: {key}")
         return JsonResponse({"message": "Session not found"}, status=404)
     
     gaze_session = gaze_sessions[key]
@@ -167,12 +171,17 @@ class VideoUploadView(APIView):
             video = file_serializer.save()
             user_id = request.data.get('user_id')
             interview_id = request.data.get('interview_id')
+            question_id = request.data.get('question_id')  # Add this line to get question_id
             video_path = video.file.path
 
-            key = f"{user_id}_{interview_id}"
+            key = f"{user_id}_{interview_id}_{question_id}"  # Modify the key to include question_id
             gaze_sessions[key] = GazeTrackingSession()
             gaze_sessions[key].video_path = video_path
+
+            # Log the session addition
+            logger.info(f"Session added for key: {key}")
 
             return JsonResponse({"message": "Video uploaded successfully"}, status=201)
         else:
             return JsonResponse(file_serializer.errors, status=400)
+
