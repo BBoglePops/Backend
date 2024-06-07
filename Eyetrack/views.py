@@ -20,14 +20,30 @@ from django.conf import settings
 permission_classes = [IsAuthenticated]
 gaze_sessions = {}
 
-def start_gaze_tracking_view(request, user_id, interview_id):
-    key = f"{user_id}_{interview_id}"
+def start_gaze_tracking_view(request, user_id, interview_id, question_id):
+    key = f"{user_id}_{interview_id}_{question_id}"
     if key not in gaze_sessions:
         gaze_sessions[key] = GazeTrackingSession()
     
     gaze_session = gaze_sessions[key]
     video_path = gaze_session.video_path
     gaze_session.start_eye_tracking(video_path)
+    
+    ##################################
+    # Display the video frames using OpenCV
+    cap = cv2.VideoCapture(video_path)
+    while(cap.isOpened()):
+        ret, frame = cap.read()
+        if ret:
+            cv2.imshow('Gaze Tracking Video', frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+        else:
+            break
+    cap.release()
+    cv2.destroyAllWindows()
+    ########################
+
     return JsonResponse({"message": "Gaze tracking started"}, status=200)
 
 def apply_gradient(center, radius, color, image, text=None):
@@ -89,8 +105,8 @@ def draw_heatmap(image, section_counts):
                 radius = 700
                 apply_gradient(center, radius, color, image, number)
 
-def stop_gaze_tracking_view(request, user_id, interview_id):
-    key = f"{user_id}_{interview_id}"
+def stop_gaze_tracking_view(request, user_id, interview_id, question_id):
+    key = f"{user_id}_{interview_id}_{question_id}"
     if key not in gaze_sessions:
         return JsonResponse({"message": "Session not found"}, status=404)
 
