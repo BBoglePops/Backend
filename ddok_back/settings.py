@@ -110,7 +110,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'Users',
     'rest_framework_simplejwt',
-	'rest_framework_simplejwt.token_blacklist',
+   'rest_framework_simplejwt.token_blacklist',
     'InterviewAnalyze',
     'myLog',
     'Eyetrack',
@@ -229,8 +229,14 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 
-# 미디어 파일을 저장할 경로
+# 프로젝트의 루트 디렉토리를 기준으로 MEDIA_ROOT 설정
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# 업로드된 파일을 저장할 경로 설정
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# 업로드된 파일에 접근할 URL 설정
+MEDIA_URL = '/media/'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field

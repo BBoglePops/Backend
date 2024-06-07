@@ -1,3 +1,7 @@
+# urls.py
+
+from django.conf import settings
+from django.conf.urls.static import static
 from django.urls import path
 from .views import start_gaze_tracking_view, stop_gaze_tracking_view, VideoUploadView
 
@@ -9,7 +13,5 @@ urlpatterns = [
     path('upload/', VideoUploadView.as_view(), name='file-upload'),
 ]
 
-
-
-# start/{user_id}/{interview_id}
-#stop/<int:user_id>/<int:interview_id>/
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
