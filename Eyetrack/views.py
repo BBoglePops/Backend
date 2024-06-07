@@ -23,26 +23,36 @@ gaze_sessions = {}
 def start_gaze_tracking_view(request, user_id, interview_id, question_id):
     key = f"{user_id}_{interview_id}_{question_id}"
     if key not in gaze_sessions:
-        gaze_sessions[key] = GazeTrackingSession()
+        return JsonResponse({"message": "Session not found"}, status=404)
     
     gaze_session = gaze_sessions[key]
     video_path = gaze_session.video_path
-    gaze_session.start_eye_tracking(video_path)
+    if not video_path:
+        return JsonResponse({"message": "Video path not found"}, status=404)
+    try:
+        gaze_session.start_eye_tracking(video_path)
+    except Exception as e:
+        return JsonResponse({"message": str(e)}, status=500)
     
-    ##################################
-    # Display the video frames using OpenCV
-    cap = cv2.VideoCapture(video_path)
-    while(cap.isOpened()):
-        ret, frame = cap.read()
-        if ret:
-            cv2.imshow('Gaze Tracking Video', frame)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
+    try:
+        ##################################
+        # Display the video frames using OpenCV
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            return JsonResponse({"message": "Cannot open video file"}, status=500)
+        while(cap.isOpened()):
+            ret, frame = cap.read()
+            if ret:
+                cv2.imshow('Gaze Tracking Video', frame)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+            else:
                 break
-        else:
-            break
-    cap.release()
-    cv2.destroyAllWindows()
-    ########################
+        cap.release()
+        cv2.destroyAllWindows()
+        ########################
+    except Exception as e:
+        return JsonResponse({"message": f"Error displaying video: {str(e)}"}, status=500)
 
     return JsonResponse({"message": "Gaze tracking started"}, status=200)
 

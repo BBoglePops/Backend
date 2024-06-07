@@ -30,14 +30,17 @@ class GazeTrackingSession:
         if not self.running:
             return
         print(self.section, ":", self.Section(self.section))
-        self.thread = threading.Timer(0.01, self.Thread_run)
+        self.thread = threading.Timer(0.1, self.Thread_run)
         self.thread.daemon = True
         self.thread.start()
 
     def start_eye_tracking(self, video_path):
+        if video_path is None:
+            raise ValueError("Video path must not be None")
+        
         self.running = True
-        self.thread = self.Thread_run()
         self.video_path = video_path
+        self.thread = self.Thread_run()
 
         avg_left_hor_gaze = 0
         avg_right_hor_gaze = 0
@@ -49,10 +52,9 @@ class GazeTrackingSession:
         total_top_ver_gaze = 0
         total_bottom_ver_gaze = 0
 
-        if video_path is not None:
-            webcam = cv2.VideoCapture(video_path)
-        else:
-            print("video not loaded..")
+        webcam = cv2.VideoCapture(video_path)
+        if not webcam.isOpened():
+            raise IOError(f"Cannot open video file: {video_path}")
 
         test_count = 1
         flag = 0
@@ -117,7 +119,7 @@ class GazeTrackingSession:
                 gaze_time = int(time.time())
                 save_loc1 = loc1
                 save_loc2 = loc2
-
+        webcam.release()
         cv2.destroyAllWindows()
 
     def stop_eye_tracking(self):
