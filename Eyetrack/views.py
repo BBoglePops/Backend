@@ -27,7 +27,7 @@ def start_gaze_tracking_view(request, user_id, interview_id, question_id):
     if key not in gaze_sessions:
         # Log the missing session
         logger.warning(f"Session not found for key: {key}")
-        return JsonResponse({"message": "Session not found"}, status=404)
+        return JsonResponse({"message": "Session not found","log_message": f"Session not found for key: {key}"}, status=404)
     
     gaze_session = gaze_sessions[key]
     video_path = gaze_session.video_path
@@ -181,7 +181,7 @@ class VideoUploadView(APIView):
             # Log the session addition
             logger.info(f"Session added for key: {key}")
 
-            return JsonResponse({"message": "Video uploaded successfully"}, status=201)
+            return JsonResponse({"message": "Video uploaded successfully","log_message": f"Session added for key: {key}"}, status=201)
         else:
             return JsonResponse(file_serializer.errors, status=400)
 
