@@ -200,13 +200,20 @@ class VoiceAPIView(APIView):
 
             audio = RecognitionAudio(content=audio_file.read())
             response = client.recognize(config=config, audio=audio)
-            if response.results:
+            # if response.results:
+            #     highest_confidence_text = ' '.join([result.alternatives[0].transcript for result in response.results if result.alternatives])
+            #     most_raw_text = ' '.join([result.alternatives[1].transcript for result in response.results if len(result.alternatives) > 1])
+            # else:
+            #     highest_confidence_text = ""
+            #     most_raw_text = ""
+
+            try:
                 highest_confidence_text = ' '.join([result.alternatives[0].transcript for result in response.results if result.alternatives])
                 most_raw_text = ' '.join([result.alternatives[1].transcript for result in response.results if len(result.alternatives) > 1])
-            else:
+            except IndexError:
                 highest_confidence_text = ""
                 most_raw_text = ""
-
+                
             highlighted_response = self.highlight_differences(most_raw_text, highest_confidence_text, question_id)  # 하이라이팅된 응답 생성
             setattr(interview_response, f'response_{question_id}', highlighted_response)  # 하이라이팅된 응답 저장
 
