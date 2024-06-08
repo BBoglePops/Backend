@@ -208,14 +208,16 @@ class VoiceAPIView(APIView):
             #     most_raw_text = ""
 
             try:
-                logger.debug(f"Number of results: {len(response.results)}")
-                for i, result in enumerate(response.results):
-                    logger.debug(f"Result {i} has {len(result.alternatives)} alternatives")
+                logger.debug(f"Number of results: {len(response.results)}")  
+                for i, result in enumerate(response.results):  
+                    logger.debug(f"Result {i} has {len(result.alternatives)} alternatives")  
+                    for j, alternative in enumerate(result.alternatives):  
+                        logger.debug(f"Alternative {j} transcript: {alternative.transcript}") 
 
                 highest_confidence_text = ' '.join([result.alternatives[0].transcript for result in response.results if result.alternatives])
                 most_raw_text = ' '.join([result.alternatives[1].transcript for result in response.results if len(result.alternatives) > 1])
             except IndexError as e:
-                logger.error(f"IndexError encountered for response results: {response.results}")
+                logger.error(f"IndexError encountered for response results: {response.results}")  
                 highest_confidence_text = ""
                 most_raw_text = ""
 
@@ -355,12 +357,25 @@ class VoiceAPIView(APIView):
 
         # 첫 번째 대안은 가장 확신도가 높은 텍스트, 두 번째 대안은 가장 원시적인 텍스트로 사용
         try:
+            logger.debug(f"Number of results: {len(response.results)}")  
+            for i, result in enumerate(response.results):  
+                logger.debug(f"Result {i} has {len(result.alternatives)} alternatives")  
+                for j, alternative in enumerate(result.alternatives):  
+                    logger.debug(f"Alternative {j} transcript: {alternative.transcript}")  
+
             highest_confidence_text = response.results[0].alternatives[0].transcript if len(response.results) > 0 and len(response.results[0].alternatives) > 0 else ""
             most_raw_text = response.results[0].alternatives[1].transcript if len(response.results) > 0 and len(response.results[0].alternatives) > 1 else highest_confidence_text
         except IndexError as e:
-            logger.error(f"IndexError encountered for response results: {response.results}")
+            logger.error(f"IndexError encountered for response results: {response.results}") 
             highest_confidence_text = ""
             most_raw_text = ""
+        # try:
+        #     highest_confidence_text = response.results[0].alternatives[0].transcript if len(response.results) > 0 and len(response.results[0].alternatives) > 0 else ""
+        #     most_raw_text = response.results[0].alternatives[1].transcript if len(response.results) > 0 and len(response.results[0].alternatives) > 1 else highest_confidence_text
+        # except IndexError as e:
+        #     logger.error(f"IndexError encountered for response results: {response.results}")
+        #     highest_confidence_text = ""
+        #     most_raw_text = ""
 
         expected_sentences = re.split(r'[.!?]', most_raw_text)
         received_sentences = re.split(r'[.!?]', highest_confidence_text)
