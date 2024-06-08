@@ -188,6 +188,9 @@ class VoiceAPIView(APIView):
             with open(audio_file_path, 'wb') as f:
                 f.write(audio_file.read())
                 
+                
+            logger.debug(f"Audio file saved at: {audio_file_path}")
+                
             # Google Cloud Storage 클라이언트 초기화
             #storage_client = storage.Client(credentials=credentials)
             #bucket_name = 'your-bucket-name'  # 자신의 버킷 이름으로 변경
@@ -201,9 +204,14 @@ class VoiceAPIView(APIView):
             audio_segment = AudioSegment.from_file(audio_file_path)
             
             # mp3 파일을 wav 파일로 변환
-            audio_segment = AudioSegment.from_file(audio_file_path, format="mp3")
-            wav_audio_path = audio_file_path.replace(".mp3", ".wav")
-            audio_segment.export(wav_audio_path, format="wav")
+            try:
+                audio_segment = AudioSegment.from_file(audio_file_path, format="mp3")
+                wav_audio_path = audio_file_path.replace(".mp3", ".wav")
+                audio_segment.export(wav_audio_path, format="wav")
+                logger.debug(f"Converted wav audio saved at: {wav_audio_path}")
+            except Exception as e:
+                logger.error(f"Error converting audio file: {str(e)}")
+                return Response({"error": "Error converting audio file", "details": str(e)}, status=500)
 
             sample_rate = audio_segment.frame_rate
             
@@ -214,22 +222,28 @@ class VoiceAPIView(APIView):
                 language_code="ko-KR",
                 max_alternatives=2
             )
-
-            audio = RecognitionAudio(content=audio_file.read())
-            response = client.recognize(config=config, audio=audio)
             
-            if response.results:
-                try:
-                    highest_confidence_text = ' '.join([result.alternatives[0].transcript 
-                                                        for result in response.results if result.alternatives])
-                    most_raw_text = ' '.join([result.alternatives[1].transcript for result in response.results if len(result.alternatives) > 1])
-                except IndexError as e:
-                    logger.error(f"IndexError in response analysis: {str(e)}")
-                    highest_confidence_text = ""
-                    most_raw_text = ""
-            else:
+            try:
+                with open(wav_audio_path, 'rb') as wav_file:
+                    audio_content = wav_file.read()
+
+                audio = RecognitionAudio(content=audio_content)
+                response = client.recognize(config=config, audio=audio)
+            
+                logger.debug(f"Response results: {response.results}")
+                highest_confidence_text = ' '.join([result.alternatives[0].transcript for result in response.results if result.alternatives])
+                most_raw_text = ' '.join([result.alternatives[1].transcript for result in response.results if len(result.alternatives) > 1])
+            except IndexError as e:
+                logger.error(f"IndexError in response analysis: {str(e)}")
+                logger.error(f"Response content: {response}")
                 highest_confidence_text = ""
                 most_raw_text = ""
+            except Exception as e:
+                logger.error(f"Error in speech recognition: {str(e)}")
+                return Response({"error": "Error in speech recognition", "details": str(e)}, status=500)
+        else:
+            highest_confidence_text = ""
+            most_raw_text = ""
 
 
 
@@ -418,6 +432,8 @@ class VoiceAPIView(APIView):
         """음성 파일의 발음 분석을 수행합니다."""
         with open(audio_file_path, 'rb') as audio_file:
             audio_content = audio_file.read()
+        logger.debug(f"Audio content length: {len(audio_content)}")
+
 
         audio = RecognitionAudio(content=audio_content)
         config = RecognitionConfig(
@@ -429,15 +445,21 @@ class VoiceAPIView(APIView):
         )
 
         client = speech.SpeechClient(credentials=credentials)
-        operation = client.long_running_recognize(config=config, audio=audio)
-        response = operation.result(timeout=90)
+        try:
+            operation = client.long_running_recognize(config=config, audio=audio)
+            response = operation.result(timeout=90)
+        except Exception as e:
+            logger.error(f"Error in long_running_recognize: {str(e)}")
+            raise e
 
+        logger.debug(f"Pronunciation response results: {response.results}")
         if response.results:
             try:
                 highest_confidence_text = response.results[0].alternatives[0].transcript if len(response.results[0].alternatives) > 0 else ""
                 most_raw_text = response.results[0].alternatives[1].transcript if len(response.results[0].alternatives) > 1 else highest_confidence_text
             except IndexError as e:
                 logger.error(f"IndexError in pronunciation analysis: {str(e)}")
+                logger.error(f"Response content: {response}")
                 highest_confidence_text = ""
                 most_raw_text = ""
         else:
@@ -604,4 +626,3 @@ class VoiceAPIView(APIView):
             pitch_message = "말씀하시는 속도가 조금 빠른 편입니다. 천천히 말하면 면접관이 더 잘 이해할 수 있고, 자신감 있는 모습을 보일 수 있습니다. 천천히 말하는 연습을 통해 전달력을 높여 보세요."
 
         return pitch_result, intensity_result, pitch_graph_base64, intensity_graph_base64, intensity_message, pitch_message
-
