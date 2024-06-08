@@ -208,12 +208,17 @@ class VoiceAPIView(APIView):
             #     most_raw_text = ""
 
             try:
+                logger.debug(f"Number of results: {len(response.results)}")
+                for i, result in enumerate(response.results):
+                    logger.debug(f"Result {i} has {len(result.alternatives)} alternatives")
+
                 highest_confidence_text = ' '.join([result.alternatives[0].transcript for result in response.results if result.alternatives])
                 most_raw_text = ' '.join([result.alternatives[1].transcript for result in response.results if len(result.alternatives) > 1])
-            except IndexError:
+            except IndexError as e:
+                logger.error(f"IndexError encountered for response results: {response.results}")
                 highest_confidence_text = ""
                 most_raw_text = ""
-                
+
             highlighted_response = self.highlight_differences(most_raw_text, highest_confidence_text, question_id)  # 하이라이팅된 응답 생성
             setattr(interview_response, f'response_{question_id}', highlighted_response)  # 하이라이팅된 응답 저장
 
@@ -349,10 +354,11 @@ class VoiceAPIView(APIView):
         response = operation.result(timeout=90)
 
         # 첫 번째 대안은 가장 확신도가 높은 텍스트, 두 번째 대안은 가장 원시적인 텍스트로 사용
-        if response.results:
-            highest_confidence_text = response.results[0].alternatives[0].transcript if len(response.results[0].alternatives) > 0 else ""
-            most_raw_text = response.results[0].alternatives[1].transcript if len(response.results[0].alternatives) > 1 else highest_confidence_text
-        else:
+        try:
+            highest_confidence_text = response.results[0].alternatives[0].transcript if len(response.results) > 0 and len(response.results[0].alternatives) > 0 else ""
+            most_raw_text = response.results[0].alternatives[1].transcript if len(response.results) > 0 and len(response.results[0].alternatives) > 1 else highest_confidence_text
+        except IndexError as e:
+            logger.error(f"IndexError encountered for response results: {response.results}")
             highest_confidence_text = ""
             most_raw_text = ""
 
