@@ -125,14 +125,14 @@ class ResponseAPIView(APIView):
 
 # 여기서부터 이서코드
 nltk.download('punkt') # 1회만 다운로드 하면댐
-    
+
 def set_korean_font():
     font_path = os.path.join(settings.BASE_DIR, 'fonts', 'NanumGothic.ttf')
     if not os.path.isfile(font_path):
         raise RuntimeError(f"Font file not found: {font_path}")
     font_prop = fm.FontProperties(fname=font_path)
     plt.rc('font', family=font_prop.get_name())
-    
+
 credentials = service_account.Credentials.from_service_account_file(
     os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 ) 
@@ -188,21 +188,8 @@ class VoiceAPIView(APIView):
             with open(audio_file_path, 'wb') as f:
                 f.write(audio_file.read())
                 
-                
             logger.debug(f"Audio file saved at: {audio_file_path}")
-                
-            # Google Cloud Storage 클라이언트 초기화
-            #storage_client = storage.Client(credentials=credentials)
-            #bucket_name = 'your-bucket-name'  # 자신의 버킷 이름으로 변경
-           # bucket = storage_client.bucket(bucket_name)
 
-            # Google Cloud Storage에 업로드
-           # blob = bucket.blob(audio_file.name)
-          # blob.upload_from_filename(audio_file_path)
-           # gcs_uri = f"gs://{bucket_name}/{audio_file.name}"
-
-            audio_segment = AudioSegment.from_file(audio_file_path)
-            
             # mp3 파일을 wav 파일로 변환
             try:
                 audio_segment = AudioSegment.from_file(audio_file_path, format="mp3")
@@ -214,7 +201,6 @@ class VoiceAPIView(APIView):
                 return Response({"error": "Error converting audio file", "details": str(e)}, status=500)
 
             sample_rate = audio_segment.frame_rate
-            
 
             config = RecognitionConfig(
                 encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
@@ -222,15 +208,20 @@ class VoiceAPIView(APIView):
                 language_code="ko-KR",
                 max_alternatives=2
             )
-            
+
             try:
                 with open(wav_audio_path, 'rb') as wav_file:
                     audio_content = wav_file.read()
 
                 audio = RecognitionAudio(content=audio_content)
                 response = client.recognize(config=config, audio=audio)
-            
+                
                 logger.debug(f"Response results: {response.results}")
+            except Exception as e:
+                logger.error(f"Error in speech recognition: {str(e)}")
+                return Response({"error": "Error in speech recognition", "details": str(e)}, status=500)
+
+            try:
                 highest_confidence_text = ' '.join([result.alternatives[0].transcript for result in response.results if result.alternatives])
                 most_raw_text = ' '.join([result.alternatives[1].transcript for result in response.results if len(result.alternatives) > 1])
             except IndexError as e:
@@ -238,39 +229,12 @@ class VoiceAPIView(APIView):
                 logger.error(f"Response content: {response}")
                 highest_confidence_text = ""
                 most_raw_text = ""
-            except Exception as e:
-                logger.error(f"Error in speech recognition: {str(e)}")
-                return Response({"error": "Error in speech recognition", "details": str(e)}, status=500)
         else:
             highest_confidence_text = ""
             most_raw_text = ""
 
-
-
-            # try:
-            #     highest_confidence_text = ' '.join([result.alternatives[0].transcript for result in response.results if result.alternatives])
-            #     most_raw_text = ' '.join([result.alternatives[1].transcript for result in response.results if len(result.alternatives) > 1])
-            # except IndexError:
-            #     logger.error(f"IndexError encountered for response results: {response.results}")
-            #     highest_confidence_text = ""
-            #     most_raw_text = ""
-            
-            # try:
-            #     highest_confidence_text = ' '.join([result.alternatives[0].transcript for result in response.results if result.alternatives])
-            #     most_raw_text = ' '.join([result.alternatives[1].transcript for result in response.results if len(result.alternatives) > 1])
-            # except IndexError:
-            #     highest_confidence_text = ""
-            #     most_raw_text = ""
-                
-            # if response.results:
-            #     highest_confidence_text = ' '.join([result.alternatives[0].transcript for result in response.results if result.alternatives])
-            #     most_raw_text = ' '.join([result.alternatives[1].transcript for result in response.results if len(result.alternatives) > 1])
-            # else:
-            #     highest_confidence_text = ""
-            #     most_raw_text = ""
-
-            highlighted_response = self.highlight_differences(most_raw_text, highest_confidence_text, question_id)  # 하이라이팅된 응답 생성
-            setattr(interview_response, f'response_{question_id}', highlighted_response)  # 하이라이팅된 응답 저장
+        highlighted_response = self.highlight_differences(most_raw_text, highest_confidence_text, question_id)  # 하이라이팅된 응답 생성
+        setattr(interview_response, f'response_{question_id}', highlighted_response)  # 하이라이팅된 응답 저장
 
         question_key = f'question_{question_id}'
         question_text = getattr(question_list, question_key, None)
@@ -325,11 +289,6 @@ class VoiceAPIView(APIView):
             if not audio_files:
                 return Response({"error": "Audio files not provided"}, status=400)
             
-            # Google Cloud Storage 클라이언트 초기화
-            #storage_client = storage.Client(credentials=credentials)
-            #bucket_name = 'your-bucket-name'  # 자신의 버킷 이름으로 변경
-            #bucket = storage_client.bucket(bucket_name)
-
             # 오디오 파일들을 하나로 병합 및 모노로 변환
             combined_audio_segments = []
             for audio_file in audio_files:
@@ -337,15 +296,10 @@ class VoiceAPIView(APIView):
                 with open(audio_temp_path, 'wb') as f:
                     f.write(audio_file.read())
 
-            # mp3 파일을 wav 파일로 변환
-            audio_segment = AudioSegment.from_file(audio_temp_path, format="mp3")
-            combined_audio_segments.append(audio_segment.set_channels(1))  # 모노로 변환
-            
-            # Google Cloud Storage에 업로드
-            #blob = bucket.blob('combined_audio.wav')
-            #blob.upload_from_filename(combined_audio_path)
-            #gcs_uri = f"gs://{bucket_name}/combined_audio.wav"
-            
+                # mp3 파일을 wav 파일로 변환
+                audio_segment = AudioSegment.from_file(audio_temp_path, format="mp3")
+                combined_audio_segments.append(audio_segment.set_channels(1))  # 모노로 변환
+
             combined_audio = sum(combined_audio_segments)
             sample_rate = combined_audio.frame_rate
 
@@ -354,24 +308,17 @@ class VoiceAPIView(APIView):
 
             logger.debug(f"Combined audio path: {combined_audio_path}")
 
-        # 발음 분석 결과 가져오기
+            # 발음 분석 결과 가져오기
             pronunciation_result, highest_confidence_text, average_similarity, pronunciation_message = self.analyze_pronunciation(combined_audio_path, sample_rate=sample_rate)
 
             logger.debug(f"Pronunciation result: {pronunciation_result}")
             logger.debug(f"Highest confidence text: {highest_confidence_text}")
 
-        # 피치 분석 결과 가져오기
+            # 피치 분석 결과 가져오기
             pitch_result, intensity_result, pitch_graph_base64, intensity_graph_base64, intensity_message, pitch_message = self.analyze_pitch(combined_audio_path)
 
             logger.debug(f"Pitch result: {pitch_result}")
             logger.debug(f"Intensity result: {intensity_result}")
-
-
-            # 발음 분석 결과 가져오기
-            pronunciation_result, highest_confidence_text, average_similarity, pronunciation_message = self.analyze_pronunciation(combined_audio_path, sample_rate=sample_rate)
-
-            # 피치 분석 결과 가져오기
-            pitch_result, intensity_result, pitch_graph_base64, intensity_graph_base64, intensity_message, pitch_message = self.analyze_pitch(combined_audio_path)
 
             # 인터뷰 응답 객체 생성 및 저장
             interview_response = InterviewAnalysis(
@@ -434,7 +381,6 @@ class VoiceAPIView(APIView):
             audio_content = audio_file.read()
         logger.debug(f"Audio content length: {len(audio_content)}")
 
-
         audio = RecognitionAudio(content=audio_content)
         config = RecognitionConfig(
             encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
@@ -465,22 +411,6 @@ class VoiceAPIView(APIView):
         else:
             highest_confidence_text = ""
             most_raw_text = ""
-
-        # try:
-        #     highest_confidence_text = response.results[0].alternatives[0].transcript if len(response.results) > 0 and len(response.results[0].alternatives) > 0 else ""
-        #     most_raw_text = response.results[0].alternatives[1].transcript if len(response.results) > 0 and len(response.results[0].alternatives) > 1 else highest_confidence_text
-        # except IndexError:
-        #     logger.error(f"IndexError encountered for response results: {response.results}")
-        #     highest_confidence_text = ""
-        #     most_raw_text = ""
-
-        # 첫 번째 대안은 가장 확신도가 높은 텍스트, 두 번째 대안은 가장 원시적인 텍스트로 사용
-        # if response.results:
-        #     highest_confidence_text = response.results[0].alternatives[0].transcript if len(response.results[0].alternatives) > 0 else ""
-        #     most_raw_text = response.results[0].alternatives[1].transcript if len(response.results[0].alternatives) > 1 else highest_confidence_text
-        # else:
-        #     highest_confidence_text = ""
-        #     most_raw_text = ""
 
         expected_sentences = re.split(r'[.!?]', most_raw_text)
         received_sentences = re.split(r'[.!?]', highest_confidence_text)
