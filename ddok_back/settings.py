@@ -1,9 +1,12 @@
+from pathlib import Path  # 추가
 import os
-from google.oauth2 import service_account
+import json
+from datetime import timedelta
+from django.core.exceptions import ImproperlyConfigured
+from google.oauth2 import service_account  # 추가
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 # Google Cloud 자격 증명 파일 경로
 GOOGLE_APPLICATION_CREDENTIALS = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 if not GOOGLE_APPLICATION_CREDENTIALS:
