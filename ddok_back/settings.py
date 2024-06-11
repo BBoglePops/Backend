@@ -114,6 +114,7 @@ INSTALLED_APPS = [
     'InterviewAnalyze',
     'myLog',
     'Eyetrack',
+    'storages',
 
 ]
 
@@ -266,3 +267,12 @@ LOGGING = {
     },
 }
 
+
+
+GS_BUCKET_NAME = 'bbogle-bucket'  # Google Cloud Storage 버킷 이름
+GS_CREDENTIALS = os.environ.get('GS_CREDENTIALS')
+if not GS_CREDENTIALS:
+    raise ImproperlyConfigured('GS_CREDENTIALS environment variable not set')
+
+DEFAULT_FILE_STORAGE = 'storages.backends.gcloud.GoogleCloudStorage'
+STATICFILES_STORAGE = 'storages.backends.gcloud.GoogleCloudStorage'
