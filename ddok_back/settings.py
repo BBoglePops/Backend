@@ -1,103 +1,36 @@
-from pathlib import Path
 import os
-import json
-
-# JWT_AUTh 의 토큰 유효기간 설정
-from datetime import timedelta
-from django.core.exceptions import ImproperlyConfigured
-
-
-
-
+from google.oauth2 import service_account
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Google Cloud 자격 증명 파일 경로
-
 GOOGLE_APPLICATION_CREDENTIALS = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 if not GOOGLE_APPLICATION_CREDENTIALS:
     raise ImproperlyConfigured("GOOGLE_APPLICATION_CREDENTIALS environment variable not set")
 
-# GOOGLE_APPLICATION_CREDENTIALS = os.path.join(BASE_DIR, 'sttapi.json')
-# os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = GOOGLE_APPLICATION_CREDENTIALS
-# def get_env_variable(var_name):
-#     """환경 변수를 가져오거나 명시적 예외를 반환한다."""
-#     try:
-#         return os.environ[var_name]
-#     except KeyError:
-#         error_msg = 'Set the {} environment variable'.format(var_name)
-#         raise ImproperlyConfigured(error_msg)
+# Load the credentials from the file
+GS_CREDENTIALS = service_account.Credentials.from_service_account_file(GOOGLE_APPLICATION_CREDENTIALS)
 
-# SECRET_KEY = get_env_variable('DJANGO_SECRET')
-
-# secret_file = os.path.join(BASE_DIR, 'secrets.json')
-
-# SECRET_KEY를 환경 변수에서 가져오기
+# SECRET_KEY 설정
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
-
-# 환경 변수에서 가져온 SECRET_KEY가 없으면 예외 발생
 if not SECRET_KEY:
     raise ImproperlyConfigured("Set the DJANGO_SECRET_KEY environment variable")
 
-
-# with open(secret_file) as f:
-#     secrets = json.loads(f.read())
-
-# def get_secret(setting):
-#     """비밀 변수를 가져오거나 명시적 예외를 반환한다."""
-#     try:
-#         return secrets[setting]
-#     except KeyError:
-#         error_msg = "Set the {} environment variable".format(setting)
-#         raise ImproperlyConfigured(error_msg)
-
-
-# SECRET_KEY = get_secret("SECRET_KEY")
-
-# # JSON 파일 경로 설정
-# secret_file = os.path.join(BASE_DIR, 'openapi.json')
-
-# # JSON 파일에서 설정 로드
-# with open(secret_file) as f:
-#     secrets = json.load(f)
-
-# def get_secret(setting, secrets=secrets):
-#     """비밀 설정을 가져오거나 명시적 예외를 반환"""
-#     try:
-#         return secrets[setting]
-#     except KeyError:
-#         error_msg = f"Set the {setting} environment variable"
-#         raise ImproperlyConfigured(error_msg)
-
-# # API 키 설정
-# OPENAI_API_KEY = get_secret("OPENAI_API_KEY")
-
-# SECRET_KEY를 환경 변수에서 가져오기
+# OPENAI_API_KEY 설정
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-
-# 환경 변수에서 가져온 SECRET_KEY가 없으면 예외 발생
 if not OPENAI_API_KEY:
     raise ImproperlyConfigured("Set the OPENAI_API_KEY environment variable")
 
-
 # Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
-
-
-# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
 ALLOWED_HOSTS = ['*']
-
 
 CORS_ORIGIN_ALLOW_ALL = True
 CORS_ALLOW_CREDENTIALS = True
 
 # Application definition
-
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -110,17 +43,16 @@ INSTALLED_APPS = [
     'corsheaders',
     'Users',
     'rest_framework_simplejwt',
-   'rest_framework_simplejwt.token_blacklist',
+    'rest_framework_simplejwt.token_blacklist',
     'InterviewAnalyze',
     'myLog',
     'Eyetrack',
     'storages',
-
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',     # 추가
-    'django.middleware.common.CommonMiddleware', # 추가
+    'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.common.CommonMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -128,24 +60,18 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
-    
 ]
 
-
-REST_FRAMEWORK = { # 추가
+REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',  #인증된 회원만 액세스 허용
-        'rest_framework.permissions.AllowAny',         #모든 회원 액세스 허용
-        'rest_framework.parsers.JSONParser',
-        'rest_framework.parsers.FormParser',
-        'rest_framework.parsers.MultiPartParser',
+        'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.AllowAny',
     ],
-    'DEFAULT_AUTHENTICATION_CLASSES': ( #api가 실행됬을 때 인증할 클래스 - Simple JWT 사용
-         'rest_framework_simplejwt.authentication.JWTAuthentication', #이와 같이 추가
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
 }
 
-# 추가
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=3),
@@ -181,20 +107,12 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'ddok_back.wsgi.application'
 
-
-# Database
-# https://docs.djangoproject.com/en/5.0/ref/settings/#databases
-
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
-
-
-# Password validation
-# https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -211,10 +129,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
-# Internationalization
-# https://docs.djangoproject.com/en/5.0/topics/i18n/
-
 LANGUAGE_CODE = 'en-us'
 
 TIME_ZONE = 'UTC'
@@ -223,31 +137,14 @@ USE_I18N = True
 
 USE_TZ = True
 
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.0/howto/static-files/
-
 STATIC_URL = 'static/'
 
-
-# 프로젝트의 루트 디렉토리를 기준으로 MEDIA_ROOT 설정
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-# 업로드된 파일을 저장할 경로 설정
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-
-# 업로드된 파일에 접근할 URL 설정
 MEDIA_URL = '/media/'
-
-# Default primary key field type
-# https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-
-# settings.py
 AUTH_USER_MODEL = 'Users.User'
-
 
 LOGGING = {
     'version': 1,
@@ -255,11 +152,11 @@ LOGGING = {
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
-            'level': 'DEBUG',  # 정보량 조절을 위해 DEBUG, INFO, WARNING 등으로 설정할 수 있습니다.
+            'level': 'DEBUG',
         },
     },
     'loggers': {
-        '': {  # 루트 로거 설정으로 모든 로그를 캡처
+        '': {
             'handlers': ['console'],
             'level': 'DEBUG',
             'propagate': False,
@@ -267,12 +164,6 @@ LOGGING = {
     },
 }
 
-
-
-GS_BUCKET_NAME = 'bbogle-bucket'  # Google Cloud Storage 버킷 이름
-GS_CREDENTIALS = os.environ.get('GS_CREDENTIALS')
-if not GS_CREDENTIALS:
-    raise ImproperlyConfigured('GS_CREDENTIALS environment variable not set')
-
+GS_BUCKET_NAME = 'bbogle-bucket'
 DEFAULT_FILE_STORAGE = 'storages.backends.gcloud.GoogleCloudStorage'
 STATICFILES_STORAGE = 'storages.backends.gcloud.GoogleCloudStorage'
