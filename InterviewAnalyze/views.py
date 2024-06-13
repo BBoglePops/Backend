@@ -53,14 +53,30 @@ class ResponseAPIView(APIView):
     REDUNDANT_EXPRESSIONS = ["어 ", "음 ", "음... ", "그러니까 ", "이제 ", "사실은 ", "그래서 ", "아니면 ", "막 ", "이런 ", "진짜 ", "이거 ", "이렇게 ", "뭐 ", "아니 ", "그냥 "]
 
     def post(self, request, question_list_id):
-        logger.info("POST request received for question_list_id: %s", question_list_id)
-        
-        question_list = get_object_or_404(QuestionLists, id=question_list_id)
-        interview_response = InterviewAnalysis(question_list=question_list)
+        logger.info(f"POST request received for question_list_id: {question_list_id}")
+        try:
+            question_list = get_object_or_404(QuestionLists, id=question_list_id)
+            interview_response = InterviewAnalysis(question_list=question_list)
+            interview_response.user = request.user  # Assign the logged-in user
 
-        # 로그인한 사용자를 user 필드에 할당
-        interview_response.user = request.user
+            response_data, all_responses = self.handle_script_analysis(request, question_list)
+            interview_response.save()
 
+            overall_feedback = self.get_overall_feedback(all_responses)
+            interview_response.overall_feedback = overall_feedback
+            interview_response.save()
+
+            return Response({
+                'interview_id': interview_response.id,
+                'responses': response_data,
+                'gpt_feedback': overall_feedback
+            }, status=200)
+
+        except Exception as e:
+            logger.error(f"An unexpected error occurred: {e}", exc_info=True)
+            return Response({'error': 'Internal Server Error', 'details': str(e)}, status=500)
+
+    def handle_script_analysis(self, request, question_list):
         response_data = []
         all_responses = ""
         for i in range(1, 11):
@@ -68,110 +84,48 @@ class ResponseAPIView(APIView):
             question_key = f'question_{i}'
             script_text = request.data.get(script_key, "")
             question_text = getattr(question_list, question_key, "")
+            all_responses += f"{script_text}\n"
 
-            # GPT API를 사용하여 표현을 분석
+            # Call to an external API
             prompt = f"다음은 면접 응답입니다:\n{script_text}\n\n이 응답에서 면접 시 사용을 지양해야 하는 표현과 그에 대한 수정 사항을 알려주세요. 또한 잉여적인 표현을 검출해 주세요."
-            try:
-                logger.info("Sending request to GPT API for script %d", i)
-                response = requests.post(
-                    "https://api.openai.com/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
-                    json={"model": "gpt-3.5-turbo", "messages": [{"role": "user", "content": prompt}]},
-                    timeout=60
-                )
-                response.raise_for_status()
-                analysis_result = response.json().get('choices')[0].get('message').get('content')
-                logger.info("Received response from GPT API for script %d", i)
+            result = self.call_external_api(prompt)
+            
+            response_data.append({
+                'question': question_text,
+                'response': script_text,
+                'analysis_result': result
+            })
+        return response_data, all_responses
 
-                # 분석 결과 파싱
-                inappropriateness = self.extract_inappropriateness(analysis_result)
-                corrections = self.extract_corrections(analysis_result)
-                redundancies = self.extract_redundancies(script_text)
-                corrected_response = self.apply_corrections(script_text, corrections, redundancies)
-
-                setattr(interview_response, f'response_{i}', script_text)
-                setattr(interview_response, f'redundancies_{i}', ', '.join(redundancies))
-                setattr(interview_response, f'inappropriateness_{i}', ', '.join(inappropriateness))
-                setattr(interview_response, f'corrections_{i}', str(corrections))
-                setattr(interview_response, f'corrected_response_{i}', corrected_response)
-
-                response_data.append({
-                    'question': question_text,
-                    'response': script_text,
-                    'redundancies': redundancies,
-                    'inappropriateness': inappropriateness,
-                    'corrections': corrections,
-                })
-
-                if script_text:
-                    all_responses += f"{script_text}\n"
-
-            except requests.exceptions.RequestException as e:
-                logger.error(f"GPT API request failed: {e}")
-                return Response({"error": "GPT API request failed", "details": str(e)}, status=500)
-
-        interview_response.save()
-
-        overall_prompt = f"다음은 사용자의 면접 응답입니다:\n{all_responses}\n\n응답이 직무연관성, 문제해결력, 의사소통능력, 성장가능성, 인성과 관련하여 적절했는지 300자 내외로 총평을 작성해줘."
+    def call_external_api(self, prompt):
         try:
-            logger.info("Sending overall feedback request to GPT API")
             response = requests.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
-                json={"model": "gpt-3.5-turbo-0125", "messages": [{"role": "user", "content": overall_prompt}]},
+                json={"model": "gpt-3.5-turbo", "messages": [{"role": "user", "content": prompt}]},
                 timeout=60
             )
             response.raise_for_status()
-            gpt_feedback = response.json().get('choices')[0].get('message').get('content')
-            interview_response.overall_feedback = gpt_feedback  # 총평을 overall_feedback 필드에 저장
-            logger.info("Received overall feedback from GPT API")
+            return response.json()
         except requests.exceptions.RequestException as e:
-            logger.error(f"GPT API request failed: {e}")
-            gpt_feedback = "총평을 가져오는 데 실패했습니다."
-            interview_response.overall_feedback = gpt_feedback  # 실패 메시지를 저장
+            logger.error(f"Failed to call external API: {e}", exc_info=True)
+            raise
 
-        interview_response.save()  # 변경 사항 저장
+    def get_overall_feedback(self, all_responses):
+        try:
+            prompt = f"다음은 사용자의 면접 응답입니다:\n{all_responses}\n\n응답이 직무연관성, 문제해결력, 의사소통능력, 성장가능성, 인성과 관련하여 적절했는지 300자 내외로 총평을 작성해줘."
+            response = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
+                json={"model": "gpt-3.5-turbo-0125", "messages": [{"role": "user", "content": prompt}]},
+                timeout=60
+            )
+            response.raise_for_status()
+            return response.json().get('choices')[0].get('message').get('content')
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to get overall feedback from API: {e}", exc_info=True)
+            return "Failed to retrieve feedback."
 
-        return Response({
-            'interview_id': interview_response.id,
-            'responses': response_data,
-            'gpt_feedback': gpt_feedback
-        }, status=200)
-
-    def extract_inappropriateness(self, analysis_result):
-        # 분석 결과에서 부적절한 표현을 추출하는 로직
-        match = re.search(r'부적절한 표현:\s*(.*?)\s*수정 사항:', analysis_result, re.DOTALL)
-        if match:
-            return match.group(1).strip().split(', ')
-        return []
-
-    def extract_corrections(self, analysis_result):
-        # 분석 결과에서 수정 사항을 추출하는 로직
-        match = re.search(r'수정 사항:\s*(.*?)\s*잉여 표현:', analysis_result, re.DOTALL)
-        if match:
-            corrections_list = match.group(1).strip().split(', ')
-            corrections = {}
-            for correction in corrections_list:
-                term, replacement = correction.split(' -> ')
-                corrections[term.strip()] = replacement.strip()
-            return corrections
-        return {}
-
-    def extract_redundancies(self, script_text):
-        # 잉여 표현을 추출하는 로직
-        redundancies = []
-        for expr in self.REDUNDANT_EXPRESSIONS:
-            if f"{expr}" in f"{script_text} ":
-                redundancies.append(expr.strip())
-        return redundancies
-
-    def apply_corrections(self, script_text, corrections, redundancies):
-        # 원본 텍스트에 수정 사항을 적용하는 로직
-        for term, replacement in corrections.items():
-            script_text = script_text.replace(term, replacement)
-        for expr in redundancies:
-            script_text = script_text.replace(expr, "")
-        return script_text
 # logger = logging.getLogger(__name__)
 
 
