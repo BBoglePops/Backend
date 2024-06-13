@@ -119,7 +119,7 @@ class ResponseAPIView(APIView):
                 "https://api.openai.com/v1/chat/completions",
                 headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
                 json={"model": "gpt-3.5-turbo-0125", "messages": [{"role": "user", "content": overall_prompt}]},
-                timeout=10
+                timeout=40
             )
             response.raise_for_status()
             gpt_feedback = response.json().get('choices')[0].get('message').get('content')
