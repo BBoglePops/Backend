@@ -50,9 +50,11 @@ class ResponseAPIView(APIView):
     parser_classes = [JSONParser]
     permission_classes = [IsAuthenticated]
 
-    REDUNDANT_EXPRESSIONS = [" 어 ", " 음 ", " 음... ", " 그러니까 ", " 이제 ", " 사실은 ", " 그래서 ", " 아니면 ", " 막 ", " 이런 ", " 진짜 ", " 이거 ", " 이렇게 ", " 뭐 ", " 아니 ", " 그냥 "]
+    REDUNDANT_EXPRESSIONS = ["어 ", "음 ", "음... ", "그러니까 ", "이제 ", "사실은 ", "그래서 ", "아니면 ", "막 ", "이런 ", "진짜 ", "이거 ", "이렇게 ", "뭐 ", "아니 ", "그냥 "]
 
     def post(self, request, question_list_id):
+        logger.info("POST request received for question_list_id: %s", question_list_id)
+        
         question_list = get_object_or_404(QuestionLists, id=question_list_id)
         interview_response = InterviewAnalysis(question_list=question_list)
 
@@ -70,6 +72,7 @@ class ResponseAPIView(APIView):
             # GPT API를 사용하여 표현을 분석
             prompt = f"다음은 면접 응답입니다:\n{script_text}\n\n이 응답에서 면접 시 사용을 지양해야 하는 표현과 그에 대한 수정 사항을 알려주세요. 또한 잉여적인 표현을 검출해 주세요."
             try:
+                logger.info("Sending request to GPT API for script %d", i)
                 response = requests.post(
                     "https://api.openai.com/v1/chat/completions",
                     headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
@@ -78,6 +81,7 @@ class ResponseAPIView(APIView):
                 )
                 response.raise_for_status()
                 analysis_result = response.json().get('choices')[0].get('message').get('content')
+                logger.info("Received response from GPT API for script %d", i)
 
                 # 분석 결과 파싱
                 inappropriateness = self.extract_inappropriateness(analysis_result)
@@ -110,6 +114,7 @@ class ResponseAPIView(APIView):
 
         overall_prompt = f"다음은 사용자의 면접 응답입니다:\n{all_responses}\n\n응답이 직무연관성, 문제해결력, 의사소통능력, 성장가능성, 인성과 관련하여 적절했는지 300자 내외로 총평을 작성해줘."
         try:
+            logger.info("Sending overall feedback request to GPT API")
             response = requests.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
@@ -119,6 +124,7 @@ class ResponseAPIView(APIView):
             response.raise_for_status()
             gpt_feedback = response.json().get('choices')[0].get('message').get('content')
             interview_response.overall_feedback = gpt_feedback  # 총평을 overall_feedback 필드에 저장
+            logger.info("Received overall feedback from GPT API")
         except requests.exceptions.RequestException as e:
             logger.error(f"GPT API request failed: {e}")
             gpt_feedback = "총평을 가져오는 데 실패했습니다."
@@ -155,7 +161,7 @@ class ResponseAPIView(APIView):
         # 잉여 표현을 추출하는 로직
         redundancies = []
         for expr in self.REDUNDANT_EXPRESSIONS:
-            if f" {expr} " in f" {script_text} ":
+            if f"{expr}" in f"{script_text} ":
                 redundancies.append(expr.strip())
         return redundancies
 
@@ -164,9 +170,8 @@ class ResponseAPIView(APIView):
         for term, replacement in corrections.items():
             script_text = script_text.replace(term, replacement)
         for expr in redundancies:
-            script_text = script_text.replace(f" {expr} ", " ")
+            script_text = script_text.replace(expr, "")
         return script_text
-
 # logger = logging.getLogger(__name__)
 
 
