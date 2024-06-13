@@ -128,7 +128,7 @@ def stop_gaze_tracking_view(request, user_id, interview_id, question_id):
     section_data = pd.read_csv(csv_filename)
     section_counts = dict(zip(section_data["Section"], section_data["Count"]))
 
-    image_path = "C:/KJE/IME_graduation/Backend-main/Backend-main/Eyetrack/0518/image.png"
+    image_path = os.path.join(settings.BASE_DIR, "Eyetrack/0518/image.png")
     original_image = cv2.imread(image_path)
 
     if original_image is None:

@@ -5,6 +5,8 @@ import time
 import threading
 import requests
 from .gaze_tracking import GazeTracking
+from django.conf import settings
+import os
 
 class GazeTrackingSession:
     def __init__(self):
@@ -127,7 +129,7 @@ class GazeTrackingSession:
         if self.thread is not None:
             self.thread.cancel()
 
-        csv_filename = "C:/KJE/IME_graduation/Backend-main/Backend-main/Eyetrack/0518/gaze_sections.csv"
+        csv_filename = os.path.join(settings.BASE_DIR, "Eyetrack/0518/gaze_sections.csv")
 
         # CSV 파일 헤더
         csv_header = ["Section", "Count"]
