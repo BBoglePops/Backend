@@ -43,6 +43,119 @@ from django.conf import settings
 import logging
 import requests
 import re
+import time
+
+logger = logging.getLogger(__name__)
+
+# class ResponseAPIView(APIView):
+#     parser_classes = [JSONParser]
+#     permission_classes = [IsAuthenticated]
+
+#     def post(self, request, question_list_id):
+#         logger.info(f"POST request received for question_list_id: {question_list_id}")
+#         try:
+#             question_list = get_object_or_404(QuestionLists, id=question_list_id)
+#             interview_response = InterviewAnalysis(question_list=question_list)
+#             interview_response.user = request.user  # Assign the logged-in user
+
+#             response_data, all_responses = self.handle_script_analysis(request, question_list)
+#             interview_response.save()
+
+#             overall_feedback = self.get_overall_feedback(all_responses)
+#             interview_response.overall_feedback = overall_feedback
+#             interview_response.save()
+
+#             return Response({
+#                 'interview_id': interview_response.id,
+#                 'responses': response_data,
+#                 'gpt_feedback': overall_feedback
+#             }, status=200)
+
+#         except Exception as e:
+#             logger.error(f"An unexpected error occurred: {e}", exc_info=True)
+#             return Response({'error': 'Internal Server Error', 'details': str(e)}, status=500)
+
+#     def handle_script_analysis(self, request, question_list):
+#         response_data = []
+#         all_responses = ""
+#         for i in range(1, 11):
+#             script_key = f'script_{i}'
+#             question_key = f'question_{i}'
+#             script_text = request.data.get(script_key, "")
+#             question_text = getattr(question_list, question_key, "")
+#             all_responses += f"{script_text}\n"
+
+#             # Call to an external API
+#             prompt = f"다음은 면접 응답입니다:\n{script_text}\n\n이 응답에서 면접 시 사용을 지양해야 하는 표현과 그에 대한 수정 사항을 알려주세요. 또한 잉여적인 표현을 검출해 주세요."
+#             result = self.call_with_exponential_backoff(self.call_external_api, prompt)
+            
+#             response_data.append({
+#                 'question': question_text,
+#                 'response': script_text,
+#                 'analysis_result': result
+#             })
+#         return response_data, all_responses
+
+#     def call_external_api(self, prompt):
+#         try:
+#             response = requests.post(
+#                 "https://api.openai.com/v1/chat/completions",
+#                 headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
+#                 json={"model": "gpt-3.5-turbo", "messages": [{"role": "user", "content": prompt}], "max_tokens": 2300},
+#                 timeout=120  # Increase timeout to handle longer requests
+#             )
+#             response.raise_for_status()
+#             return response.json()
+#         except requests.exceptions.RequestException as e:
+#             logger.error(f"Failed to call external API: {e}", exc_info=True)
+#             raise
+
+#     def call_with_exponential_backoff(self, api_call_function, *args, **kwargs):
+#         retries = 5
+#         delay = 1  # 시작 지연 시간 (초)
+
+#         for i in range(retries):
+#             try:
+#                 return api_call_function(*args, **kwargs)
+#             except requests.exceptions.RequestException as e:
+#                 if i < retries - 1:
+#                     logger.warning(f"Request failed: {e}. Retrying in {delay} seconds.")
+#                     time.sleep(delay)
+#                     delay *= 2  # 지연 시간 증가
+#                 else:
+#                     logger.error(f"All retries failed: {e}", exc_info=True)
+#                     raise e
+
+#     def get_overall_feedback(self, all_responses):
+#         try:
+#             prompt = f"다음은 사용자의 면접 응답입니다:\n{all_responses}\n\n응답이 직무연관성, 문제해결력, 의사소통능력, 성장가능성, 인성과 관련하여 적절했는지 300자 내외로 총평을 작성해줘."
+#             response = requests.post(
+#                 "https://api.openai.com/v1/chat/completions",
+#                 headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
+#                 json={"model": "gpt-3.5-turbo-0125", "messages": [{"role": "user", "content": prompt}]},
+#                 timeout=120  # Increase timeout to handle longer requests
+#             )
+#             response.raise_for_status()
+#             return response.json().get('choices')[0].get('message').get('content')
+#         except requests.exceptions.RequestException as e:
+#             logger.error(f"Failed to get overall feedback from API: {e}", exc_info=True)
+#             return "Failed to retrieve feedback."
+
+
+# logger = logging.getLogger(__name__)
+
+
+# 답변 스크립트 분석
+from django.shortcuts import get_object_or_404
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import JSONParser
+from .models import InterviewAnalysis, QuestionLists
+import os
+from django.conf import settings
+import logging
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -50,171 +163,92 @@ class ResponseAPIView(APIView):
     parser_classes = [JSONParser]
     permission_classes = [IsAuthenticated]
 
-    REDUNDANT_EXPRESSIONS = ["어 ", "음 ", "음... ", "그러니까 ", "이제 ", "사실은 ", "그래서 ", "아니면 ", "막 ", "이런 ", "진짜 ", "이거 ", "이렇게 ", "뭐 ", "아니 ", "그냥 "]
-
     def post(self, request, question_list_id):
-        logger.info(f"POST request received for question_list_id: {question_list_id}")
+        question_list = get_object_or_404(QuestionLists, id=question_list_id)
+        interview_response = InterviewAnalysis(question_list=question_list)
+
+        # 로그인한 사용자를 user 필드에 할당
+        interview_response.user = request.user
+
+        base_dir = settings.BASE_DIR
+        redundant_expressions_path = os.path.join(base_dir, 'InterviewAnalyze', 'redundant_expressions.txt')
+        inappropriate_terms_path = os.path.join(base_dir, 'InterviewAnalyze', 'inappropriate_terms.txt')
+
         try:
-            question_list = get_object_or_404(QuestionLists, id=question_list_id)
-            interview_response = InterviewAnalysis(question_list=question_list)
-            interview_response.user = request.user  # Assign the logged-in user
+            with open(redundant_expressions_path, 'r') as file:
+                redundant_expressions = file.read().splitlines()
+            with open(inappropriate_terms_path, 'r') as file:
+                inappropriate_terms = dict(line.strip().split(':') for line in file if ':' in line)
+        except FileNotFoundError as e:
+            logger.error(f"File not found: {e}")
+            return Response({"error": "Required file not found"}, status=500)
 
-            response_data, all_responses = self.handle_script_analysis(request, question_list)
-            interview_response.save()
-
-            overall_feedback = self.get_overall_feedback(all_responses)
-            interview_response.overall_feedback = overall_feedback
-            interview_response.save()
-
-            return Response({
-                'interview_id': interview_response.id,
-                'responses': response_data,
-                'gpt_feedback': overall_feedback
-            }, status=200)
-
-        except Exception as e:
-            logger.error(f"An unexpected error occurred: {e}", exc_info=True)
-            return Response({'error': 'Internal Server Error', 'details': str(e)}, status=500)
-
-    def handle_script_analysis(self, request, question_list):
         response_data = []
         all_responses = ""
         for i in range(1, 11):
             script_key = f'script_{i}'
+            response_key = f'response_{i}'
             question_key = f'question_{i}'
             script_text = request.data.get(script_key, "")
             question_text = getattr(question_list, question_key, "")
-            all_responses += f"{script_text}\n"
 
-            # Call to an external API
-            prompt = f"다음은 면접 응답입니다:\n{script_text}\n\n이 응답에서 면접 시 사용을 지양해야 하는 표현과 그에 대한 수정 사항을 알려주세요. 또한 잉여적인 표현을 검출해 주세요."
-            result = self.call_external_api(prompt)
-            
+            # 잉여 표현과 부적절한 표현을 분석
+            found_redundant = self.find_redundant_expressions(script_text, redundant_expressions)
+            corrections = {}
+            corrected_text = script_text
+            for term, replacement in inappropriate_terms.items():
+                if term in script_text:
+                    corrections[term] = replacement
+                    corrected_text = corrected_text.replace(term, replacement)
+
+            setattr(interview_response, f'response_{i}', script_text)
+            setattr(interview_response, f'redundancies_{i}', ', '.join(found_redundant))
+            setattr(interview_response, f'inappropriateness_{i}', ', '.join(corrections.keys()))
+            setattr(interview_response, f'corrections_{i}', str(corrections))
+            setattr(interview_response, f'corrected_response_{i}', corrected_text)
+
             response_data.append({
                 'question': question_text,
                 'response': script_text,
-                'analysis_result': result
+                'redundancies': found_redundant,
+                'inappropriateness': list(corrections.keys()),
+                'corrections': corrections
             })
-        return response_data, all_responses
 
-    def call_external_api(self, prompt):
-        try:
-            response = requests.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
-                json={"model": "gpt-3.5-turbo", "messages": [{"role": "user", "content": prompt}]},
-                timeout=60
-            )
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to call external API: {e}", exc_info=True)
-            raise
+            if script_text:
+                all_responses += f"{script_text}\n"
 
-    def get_overall_feedback(self, all_responses):
+        interview_response.save()
+
+        prompt = f"다음은 사용자의 면접 응답입니다:\n{all_responses}\n\n응답이 직무연관성, 문제해결력, 의사소통능력, 성장가능성, 인성과 관련하여 적절했는지 300자 내외로 총평을 작성해줘."
         try:
-            prompt = f"다음은 사용자의 면접 응답입니다:\n{all_responses}\n\n응답이 직무연관성, 문제해결력, 의사소통능력, 성장가능성, 인성과 관련하여 적절했는지 300자 내외로 총평을 작성해줘."
             response = requests.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
                 json={"model": "gpt-3.5-turbo-0125", "messages": [{"role": "user", "content": prompt}]},
-                timeout=60
+                timeout=10
             )
             response.raise_for_status()
-            return response.json().get('choices')[0].get('message').get('content')
+            gpt_feedback = response.json().get('choices')[0].get('message').get('content')
+            interview_response.overall_feedback = gpt_feedback  # 총평을 overall_feedback 필드에 저장
         except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to get overall feedback from API: {e}", exc_info=True)
-            return "Failed to retrieve feedback."
+            logger.error(f"GPT API request failed: {e}")
+            gpt_feedback = "총평을 가져오는 데 실패했습니다."
+            interview_response.overall_feedback = gpt_feedback  # 실패 메시지를 저장
 
-# logger = logging.getLogger(__name__)
+        interview_response.save()  # 변경 사항 저장
 
+        return Response({
+            'interview_id': interview_response.id,
+            'responses': response_data,
+            'gpt_feedback': gpt_feedback
+        }, status=200)
 
-# # 답변 스크립트 분석
-# class ResponseAPIView(APIView):
-#     parser_classes = [JSONParser]
-#     permission_classes = [IsAuthenticated]
-
-#     def post(self, request, question_list_id):
-#         question_list = get_object_or_404(QuestionLists, id=question_list_id)
-#         interview_response = InterviewAnalysis(question_list=question_list)
-
-#         # 로그인한 사용자를 user 필드에 할당
-#         interview_response.user = request.user
-
-#         base_dir = settings.BASE_DIR
-#         redundant_expressions_path = os.path.join(base_dir, 'InterviewAnalyze', 'redundant_expressions.txt')
-#         inappropriate_terms_path = os.path.join(base_dir, 'InterviewAnalyze', 'inappropriate_terms.txt')
-
-#         try:
-#             with open(redundant_expressions_path, 'r') as file:
-#                 redundant_expressions = file.read().splitlines()
-#             with open(inappropriate_terms_path, 'r') as file:
-#                 inappropriate_terms = dict(line.strip().split(':') for line in file if ':' in line)
-#         except FileNotFoundError as e:
-#             logger.error(f"File not found: {e}")
-#             return Response({"error": "Required file not found"}, status=500)
-
-#         response_data = []
-#         all_responses = ""
-#         for i in range(1, 11):
-#             script_key = f'script_{i}'
-#             response_key = f'response_{i}'
-#             question_key = f'question_{i}'
-#             script_text = request.data.get(script_key, "")
-#             question_text = getattr(question_list, question_key, "")
-
-#             # 잉여 표현과 부적절한 표현을 분석
-#             found_redundant = [expr for expr in redundant_expressions if expr in script_text]
-#             corrections = {}
-#             corrected_text = script_text
-#             for term, replacement in inappropriate_terms.items():
-#                 if term in script_text:
-#                     corrections[term] = replacement
-#                     corrected_text = corrected_text.replace(term, replacement)
-
-#             setattr(interview_response, f'response_{i}', script_text)
-#             setattr(interview_response, f'redundancies_{i}', ', '.join(found_redundant))
-#             setattr(interview_response, f'inappropriateness_{i}', ', '.join(corrections.keys()))
-#             setattr(interview_response, f'corrections_{i}', str(corrections))
-#             setattr(interview_response, f'corrected_response_{i}', corrected_text)
-
-#             response_data.append({
-#                 'question': question_text,
-#                 'response': script_text,
-#                 'redundancies': found_redundant,
-#                 'inappropriateness': list(corrections.keys()),
-#                 'corrections': corrections,
-#                 'corrected_response': corrected_text,
-#             })
-
-#             if script_text:
-#                 all_responses += f"{script_text}\n"
-
-#         interview_response.save()
-
-#         prompt = f"다음은 사용자의 면접 응답입니다:\n{all_responses}\n\n응답이 직무연관성, 문제해결력, 의사소통능력, 성장가능성, 인성과 관련하여 적절했는지 300자 내외로 총평을 작성해줘."
-#         try:
-#             response = requests.post(
-#                 "https://api.openai.com/v1/chat/completions",
-#                 headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
-#                 json={"model": "gpt-3.5-turbo-0125", "messages": [{"role": "user", "content": prompt}]},
-#                 timeout=10
-#             )
-#             response.raise_for_status()
-#             gpt_feedback = response.json().get('choices')[0].get('message').get('content')
-#             interview_response.overall_feedback = gpt_feedback  # 총평을 overall_feedback 필드에 저장
-#         except requests.exceptions.RequestException as e:
-#             logger.error(f"GPT API request failed: {e}")
-#             gpt_feedback = "총평을 가져오는 데 실패했습니다."
-#             interview_response.overall_feedback = gpt_feedback  # 실패 메시지를 저장
-
-#         interview_response.save()  # 변경 사항 저장
-
-#         return Response({
-#             'interview_id': interview_response.id,
-#             'responses': response_data,
-#             'gpt_feedback': gpt_feedback
-#         }, status=200)
+    def find_redundant_expressions(self, script_text, redundant_expressions):
+        # 스크립트를 공백을 기준으로 단어 단위로 분할
+        words = script_text.split()
+        redundancies = [word for word in words if word in redundant_expressions]
+        return redundancies
 
 
 # 여기서부터 이서코드
