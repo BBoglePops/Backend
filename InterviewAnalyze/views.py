@@ -405,9 +405,9 @@ class VoiceAPIView(APIView):
         except PermissionError as e:
             logger.error(f"Permission denied: {str(e)}")
             return Response({"error": "Permission denied", "details": str(e)}, status=500)
-        except Exception as e:
-            logger.error(f"Unexpected error in VoiceAPIView: {str(e)}")
-            return Response({"error": "Internal Server Error", "details": str(e)}, status=500)
+        # except Exception as e:
+        #     logger.error(f"Unexpected error in VoiceAPIView: {str(e)}")
+        #     return Response({"error": "Internal Server Error", "details": str(e)}, status=500)
 
     def combine_audio_files(self, audio_files):
         """여러 개의 오디오 파일을 하나로 병합하고 모노로 변환"""
