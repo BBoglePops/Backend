@@ -13,6 +13,8 @@ import requests
 
 # 이서 import 항목
 from google.cloud import speech
+from google.cloud import storage
+from django.http import JsonResponse
 from rest_framework.parsers import MultiPartParser, FormParser
 from google.cloud.speech import RecognitionConfig, RecognitionAudio
 from google.oauth2 import service_account
@@ -30,6 +32,7 @@ import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 import nltk
 import matplotlib
+from pathlib import Path
 matplotlib.use('Agg')  # 백엔드를 Agg로 설정
 
 from django.shortcuts import get_object_or_404
@@ -46,103 +49,6 @@ import re
 import time
 
 logger = logging.getLogger(__name__)
-
-# class ResponseAPIView(APIView):
-#     parser_classes = [JSONParser]
-#     permission_classes = [IsAuthenticated]
-
-#     def post(self, request, question_list_id):
-#         logger.info(f"POST request received for question_list_id: {question_list_id}")
-#         try:
-#             question_list = get_object_or_404(QuestionLists, id=question_list_id)
-#             interview_response = InterviewAnalysis(question_list=question_list)
-#             interview_response.user = request.user  # Assign the logged-in user
-
-#             response_data, all_responses = self.handle_script_analysis(request, question_list)
-#             interview_response.save()
-
-#             overall_feedback = self.get_overall_feedback(all_responses)
-#             interview_response.overall_feedback = overall_feedback
-#             interview_response.save()
-
-#             return Response({
-#                 'interview_id': interview_response.id,
-#                 'responses': response_data,
-#                 'gpt_feedback': overall_feedback
-#             }, status=200)
-
-#         except Exception as e:
-#             logger.error(f"An unexpected error occurred: {e}", exc_info=True)
-#             return Response({'error': 'Internal Server Error', 'details': str(e)}, status=500)
-
-#     def handle_script_analysis(self, request, question_list):
-#         response_data = []
-#         all_responses = ""
-#         for i in range(1, 11):
-#             script_key = f'script_{i}'
-#             question_key = f'question_{i}'
-#             script_text = request.data.get(script_key, "")
-#             question_text = getattr(question_list, question_key, "")
-#             all_responses += f"{script_text}\n"
-
-#             # Call to an external API
-#             prompt = f"다음은 면접 응답입니다:\n{script_text}\n\n이 응답에서 면접 시 사용을 지양해야 하는 표현과 그에 대한 수정 사항을 알려주세요. 또한 잉여적인 표현을 검출해 주세요."
-#             result = self.call_with_exponential_backoff(self.call_external_api, prompt)
-            
-#             response_data.append({
-#                 'question': question_text,
-#                 'response': script_text,
-#                 'analysis_result': result
-#             })
-#         return response_data, all_responses
-
-#     def call_external_api(self, prompt):
-#         try:
-#             response = requests.post(
-#                 "https://api.openai.com/v1/chat/completions",
-#                 headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
-#                 json={"model": "gpt-3.5-turbo", "messages": [{"role": "user", "content": prompt}], "max_tokens": 2300},
-#                 timeout=120  # Increase timeout to handle longer requests
-#             )
-#             response.raise_for_status()
-#             return response.json()
-#         except requests.exceptions.RequestException as e:
-#             logger.error(f"Failed to call external API: {e}", exc_info=True)
-#             raise
-
-#     def call_with_exponential_backoff(self, api_call_function, *args, **kwargs):
-#         retries = 5
-#         delay = 1  # 시작 지연 시간 (초)
-
-#         for i in range(retries):
-#             try:
-#                 return api_call_function(*args, **kwargs)
-#             except requests.exceptions.RequestException as e:
-#                 if i < retries - 1:
-#                     logger.warning(f"Request failed: {e}. Retrying in {delay} seconds.")
-#                     time.sleep(delay)
-#                     delay *= 2  # 지연 시간 증가
-#                 else:
-#                     logger.error(f"All retries failed: {e}", exc_info=True)
-#                     raise e
-
-#     def get_overall_feedback(self, all_responses):
-#         try:
-#             prompt = f"다음은 사용자의 면접 응답입니다:\n{all_responses}\n\n응답이 직무연관성, 문제해결력, 의사소통능력, 성장가능성, 인성과 관련하여 적절했는지 300자 내외로 총평을 작성해줘."
-#             response = requests.post(
-#                 "https://api.openai.com/v1/chat/completions",
-#                 headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
-#                 json={"model": "gpt-3.5-turbo-0125", "messages": [{"role": "user", "content": prompt}]},
-#                 timeout=120  # Increase timeout to handle longer requests
-#             )
-#             response.raise_for_status()
-#             return response.json().get('choices')[0].get('message').get('content')
-#         except requests.exceptions.RequestException as e:
-#             logger.error(f"Failed to get overall feedback from API: {e}", exc_info=True)
-#             return "Failed to retrieve feedback."
-
-
-# logger = logging.getLogger(__name__)
 
 
 # 답변 스크립트 분석
@@ -269,6 +175,14 @@ class VoiceAPIView(APIView):
     parser_classes = [MultiPartParser, FormParser]
     permission_classes = [IsAuthenticated]
 
+    def upload_to_gcs(self, file, filename):
+        """Google Cloud Storage에 파일 업로드"""
+        client = storage.Client(credentials=settings.GCS_CREDENTIALS)
+        bucket = client.get_bucket(settings.GCS_BUCKET_NAME)
+        blob = bucket.blob(filename)
+        blob.upload_from_file(file, content_type=file.content_type)
+        return blob.public_url
+        
     def get(self, request):
         # 현재 로그인한 사용자의 인터뷰 분석 결과를 조회
         interview_responses = InterviewAnalysis.objects.filter(user=request.user).order_by('-created_at')
@@ -312,9 +226,18 @@ class VoiceAPIView(APIView):
         file_key = f'audio_{question_id}'  # question_id를 사용하여 파일 키 생성
         if file_key in request.FILES:
             audio_file = request.FILES[file_key]
-            audio_file_path = os.path.join(settings.MEDIA_ROOT, audio_file.name)
-            with open(audio_file_path, 'wb') as f:
-                f.write(audio_file.read())
+            audio_filename = f'audio_{question_id}.mp3'
+
+            # Google Cloud Storage에 업로드
+            audio_file_url = self.upload_to_gcs(audio_file, audio_filename)
+            logger.debug(f"Audio file uploaded to: {audio_file_url}")
+
+            # Google Cloud Storage에서 파일 다운로드
+            audio_blob = storage.Client(credentials=settings.GCS_CREDENTIALS).bucket(settings.GCS_BUCKET_NAME).blob(audio_filename)
+            audio_file_path = os.path.join(settings.MEDIA_ROOT, audio_filename)
+            audio_blob.download_to_filename(audio_file_path)
+            logger.debug(f"Audio file saved at: {audio_file_path}")
+            
                 
             logger.debug(f"Audio file saved at: {audio_file_path}")
 
