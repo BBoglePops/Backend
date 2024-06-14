@@ -78,7 +78,16 @@ class InterviewAnalysis(models.Model):
     pronunciation_message = models.TextField(null=True, blank=True)
     pitch_message = models.TextField(null=True, blank=True)
     intensity_message = models.TextField(null=True, blank=True)
-    
+    response_audio_1 = models.FileField(upload_to='audios/', null=True, blank=True)
+    response_audio_2 = models.FileField(upload_to='audios/', null=True, blank=True)
+    response_audio_3 = models.FileField(upload_to='audios/', null=True, blank=True)
+    response_audio_4 = models.FileField(upload_to='audios/', null=True, blank=True)
+    response_audio_5 = models.FileField(upload_to='audios/', null=True, blank=True)
+    response_audio_6 = models.FileField(upload_to='audios/', null=True, blank=True)
+    response_audio_7 = models.FileField(upload_to='audios/', null=True, blank=True)
+    response_audio_8 = models.FileField(upload_to='audios/', null=True, blank=True)
+    response_audio_9 = models.FileField(upload_to='audios/', null=True, blank=True)
+    response_audio_10 = models.FileField(upload_to='audios/', null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)  # 생성 시각 자동 저장
 
     def __str__(self):
