@@ -283,51 +283,15 @@ class VoiceAPIView(APIView):
             else:
                 logger.error(f"No results in speech recognition response: {response}")
 
+
+            if not highest_confidence_text and response.results:
+                highest_confidence_text = response.results[0].alternatives[0].transcript if response.results[0].alternatives else ""
+                most_raw_text = response.results[0].alternatives[1].transcript if len(response.results[0].alternatives) > 1 else highest_confidence_text
+            # 수정된 부분 끝
         else:
             highest_confidence_text = ""
             most_raw_text = ""
 
-        highlighted_response = self.highlight_differences(most_raw_text, highest_confidence_text, question_id)  # 하이라이팅된 응답 생성
-        setattr(interview_response, f'response_{question_id}', highlighted_response)  # 하이라이팅된 응답 저장
-
-        question_key = f'question_{question_id}'
-        question_text = getattr(question_list, question_key, None)
-        response_text = getattr(interview_response, f'response_{question_id}', None)
-
-        response_data = {
-            'question': question_text,
-            'response': response_text,
-        }
-
-        # 발음 분석 및 피치 분석 수행
-        pronunciation_result = None
-        pitch_result = None
-        intensity_result = None
-
-        if audio_file_path:
-            pronunciation_result, pronunciation_message = self.analyze_pronunciation(audio_file_path, most_raw_text, highest_confidence_text, question_id)  # question_id 전달
-            pitch_result, intensity_result, pitch_graph_base64, intensity_graph_base64, intensity_message, pitch_message = self.analyze_pitch(audio_file_path)
-
-            # 분석 결과를 인터뷰 응답 객체에 저장
-            interview_response.pronunciation_similarity = str(pronunciation_result)
-            interview_response.pitch_analysis = str(pitch_result)
-            interview_response.intensity_analysis = str(intensity_result)
-            interview_response.pronunciation_message = pronunciation_message
-            interview_response.pitch_message = pitch_message
-            interview_response.intensity_message = intensity_message
-
-        interview_response.save()
-
-        return Response({
-            'interview_id': interview_response.id,
-            'response': response_data,
-            'pronunciation_similarity': pronunciation_result,
-            'pitch_analysis': pitch_result,
-            'intensity_analysis': intensity_result,
-            'intensity_message': intensity_message,
-            'pitch_message': pitch_message,
-            'pronunciation_message': pronunciation_message
-        }, status=200)
 
     def handle_audio_analysis(self, request):
         question_list_id = request.data.get('question_list_id')
