@@ -271,15 +271,18 @@ class VoiceAPIView(APIView):
             except Exception as e:
                 logger.error(f"Error in speech recognition: {str(e)}")
                 return Response({"error": "Error in speech recognition", "details": str(e)}, status=500)
+            
+            highest_confidence_text = ""
+            most_raw_text = ""
 
-            try:
-                highest_confidence_text = ' '.join([result.alternatives[0].transcript for result in response.results if result.alternatives])
-                most_raw_text = ' '.join([result.alternatives[1].transcript for result in response.results if len(result.alternatives) > 1])
-            except IndexError as e:
-                logger.error(f"IndexError in response analysis: {str(e)}")
-                logger.error(f"Response content: {response}")
-                highest_confidence_text = ""
-                most_raw_text = ""
+            if response.results:
+                alternatives = response.results[0].alternatives
+                if alternatives:
+                    highest_confidence_text = alternatives[0].transcript if len(alternatives) > 0 else ""
+                    most_raw_text = alternatives[1].transcript if len(alternatives) > 1 else highest_confidence_text
+            else:
+                logger.error(f"No results in speech recognition response: {response}")
+
         else:
             highest_confidence_text = ""
             most_raw_text = ""
