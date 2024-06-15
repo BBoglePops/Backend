@@ -76,6 +76,7 @@ import os
 from django.conf import settings
 import logging
 import requests
+import binascii
 
 logger = logging.getLogger(__name__)
 
@@ -217,7 +218,7 @@ class VoiceAPIView(APIView):
         if not temp_file_data:
             return Response({"error": "No files to merge"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Ensure temp_file_data is a list and not empty
+        # 리스트 빈칸 
         if not isinstance(temp_file_data, list) or len(temp_file_data) == 0:
             return Response({"error": "Invalid file data format or no data provided"}, status=status.HTTP_400_BAD_REQUEST)
         
@@ -225,16 +226,22 @@ class VoiceAPIView(APIView):
         for i, file_data in enumerate(temp_file_data):
             if not file_data:
                 return Response({"error": f"File data at index {i} is empty or invalid"}, status=status.HTTP_400_BAD_REQUEST)
-
+        
         try:
             combined = AudioSegment.empty()
             for i, file_data in enumerate(temp_file_data):
                 try:
+                    file_data = correct_base64_padding(file_data)
+                    if not is_valid_base64(file_data):
+                        raise ValueError("Invalid Base64 data")
                     file_data = base64.b64decode(file_data.encode('utf-8'))
                     audio = AudioSegment.from_file(BytesIO(file_data), format="mp3")
                     combined += audio
+                except (binascii.Error, ValueError) as e:
+                    return Response({"error": f"Invalid Base64 data at index {i}: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
                 except Exception as e:
                     return Response({"error": f"Error processing file index {i}: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
 
             # 병합된 파일을 WAV 형식으로 변환
             wav_file = BytesIO()
@@ -260,13 +267,15 @@ class VoiceAPIView(APIView):
             os.remove(temp_wav_file_path)
             
             # 데이터베이스에 분석 결과 저장
-            interview_analysis = InterviewAnalysis.objects.create(
+            interview_analysis = InterviewAnalysis(
                 user=request.user,
                 pitch_graph=analysis_result["pitch_graph"],
                 intensity_graph=analysis_result["intensity_graph"],
                 pitch_summary=analysis_result["pitch_summary"],
                 intensity_summary=analysis_result["intensity_summary"],
             )
+            interview_analysis.save()
+
 
             return Response(analysis_result, status=status.HTTP_200_OK)
         except Exception as e:
@@ -335,3 +344,15 @@ class VoiceAPIView(APIView):
             return "님의 말하기 속도는 평범해요"
         else:
             return "님은 아주 느리게 말함"
+    
+def correct_base64_padding(base64_string):
+    return base64_string + '=' * (4 - len(base64_string) % 4)
+
+def is_valid_base64(base64_string):
+    try:
+        if isinstance(base64_string, str):
+            base64.b64decode(base64_string.encode('utf-8'))
+            return True
+    except binascii.Error:
+        return False
+    return False
