@@ -34,6 +34,11 @@ import nltk
 import matplotlib
 from pathlib import Path
 matplotlib.use('Agg')  # 백엔드를 Agg로 설정
+from rest_framework import status
+from pydub import AudioSegment
+from io import BytesIO
+import matplotlib.pyplot as plt
+import tempfile 
 
 from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
@@ -172,405 +177,140 @@ credentials = service_account.Credentials.from_service_account_file(
 ) 
 
 class VoiceAPIView(APIView):
-    parser_classes = [MultiPartParser, FormParser]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]  # 파일 업로드를 위해 MultiPartParser와 FormParser 사용
     permission_classes = [IsAuthenticated]
 
-    def upload_to_gcs(self, file, filename):
-        """Google Cloud Storage에 파일 업로드"""
-        client = storage.Client(credentials=settings.GCS_CREDENTIALS)
-        bucket = client.get_bucket(settings.GCS_BUCKET_NAME)
-        blob = bucket.blob(filename)
-        blob.upload_from_file(file, content_type=file.content_type)
-        return blob.public_url
-        
-    def get(self, request):
-        # 현재 로그인한 사용자의 인터뷰 분석 결과를 조회
-        interview_responses = InterviewAnalysis.objects.filter(user=request.user).order_by('-created_at')
-        data = []
-        for interview in interview_responses:
-            data.append({
-                'interview_id': interview.id,
-                'pronunciation_similarity': interview.pronunciation_similarity,
-                'pitch_analysis': interview.pitch_analysis,
-                'intensity_analysis': interview.intensity_analysis,
-                'pronunciation_message': interview.pronunciation_message,
-                'pitch_message': interview.pitch_message,
-                'intensity_message': interview.intensity_message,
-                'response_1': interview.response_1,
-                'response_2': interview.response_2,
-                'response_3': interview.response_3,
-                'response_4': interview.response_4,
-                'response_5': interview.response_5,
-                'response_6': interview.response_6,
-                'response_7': interview.response_7,
-                'response_8': interview.response_8,
-                'response_9': interview.response_9,
-                'response_10': interview.response_10,
-            })
-        return Response(data, status=200)
+    def post(self, request, *args, **kwargs):
+        action = request.query_params.get('action', 'upload')  # 쿼리 파라미터로 'action' 값을 가져오고 기본값은 'upload'
 
-    def post(self, request, question_list_id=None):
-        question_id = request.data.get('question_id')
-        if question_list_id:
-            return self.handle_response_analysis(request, question_list_id, question_id)
+        if action == 'upload':
+            return self.upload_file(request)  # 파일 업로드 처리
+        elif action == 'merge':
+            return self.merge_files_and_analyze(request)  # 파일 병합 및 분석 처리
         else:
-            return self.handle_audio_analysis(request)
+            return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)  # 유효하지 않은 action 처리
 
-    def handle_response_analysis(self, request, question_list_id, question_id):
-        question_list = get_object_or_404(QuestionLists, id=question_list_id)
-        interview_response = InterviewAnalysis(question_list=question_list, user=request.user)
+    
+    # 음성 파일 받기
+    def upload_file(self, request):
+        uploaded_files = request.FILES.getlist('files')
+        if not uploaded_files:
+            return Response({"error": "No files uploaded"}, status=status.HTTP_400_BAD_REQUEST)
 
-        client = speech.SpeechClient(credentials=credentials)
-        audio_file_path = None
-
-        file_key = f'audio_{question_id}'  # question_id를 사용하여 파일 키 생성
-        if file_key in request.FILES:
-            audio_file = request.FILES[file_key]
-            audio_filename = f'audio_{question_id}.mp3'
-
-            # Google Cloud Storage에 업로드
-            audio_file_url = self.upload_to_gcs(audio_file, audio_filename)
-            logger.debug(f"Audio file uploaded to: {audio_file_url}")
-
-            # Google Cloud Storage에서 파일 다운로드
-            audio_blob = storage.Client(credentials=settings.GCS_CREDENTIALS).bucket(settings.GCS_BUCKET_NAME).blob(audio_filename)
-            audio_file_path = os.path.join(settings.MEDIA_ROOT, audio_filename)
-            audio_blob.download_to_filename(audio_file_path)
-            logger.debug(f"Audio file saved at: {audio_file_path}")
+        # 파일 데이터를 메모리에 저장
+        temp_file_data = []
+        for file in uploaded_files:
+            temp_file_data.append(file.read())
             
-                
-            logger.debug(f"Audio file saved at: {audio_file_path}")
+        return Response({"file_data": [base64.b64encode(data).decode('utf-8') for data in temp_file_data]}, status=status.HTTP_201_CREATED) # 바이너리로 읽기
 
-            # mp3 파일을 wav 파일로 변환
-            try:
-                audio_segment = AudioSegment.from_file(audio_file_path, format="mp3")
-                wav_audio_path = audio_file_path.replace(".mp3", ".wav")
-                audio_segment.export(wav_audio_path, format="wav")
-                logger.debug(f"Converted wav audio saved at: {wav_audio_path}")
-            except Exception as e:
-                logger.error(f"Error converting audio file: {str(e)}")
-                return Response({"error": "Error converting audio file", "details": str(e)}, status=500)
+        #return Response({"file_data": temp_file_data}, status=status.HTTP_201_CREATED)
 
-            sample_rate = audio_segment.frame_rate
+    def merge_files_and_analyze(self, request):
+        temp_file_data = request.data.get('file_data')
+        if not temp_file_data:
+            return Response({"error": "No files to merge"}, status=status.HTTP_400_BAD_REQUEST)
 
-            config = RecognitionConfig(
-                encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-                sample_rate_hertz=sample_rate,  # 동적으로 샘플링 속도 설정
-                language_code="ko-KR",
-                max_alternatives=2
-            )
-
-            try:
-                with open(wav_audio_path, 'rb') as wav_file:
-                    audio_content = wav_file.read()
-
-                audio = RecognitionAudio(content=audio_content)
-                response = client.recognize(config=config, audio=audio)
-                
-                logger.debug(f"Response results: {response.results}")
-            except Exception as e:
-                logger.error(f"Error in speech recognition: {str(e)}")
-                return Response({"error": "Error in speech recognition", "details": str(e)}, status=500)
-            
-            highest_confidence_text = ""
-            most_raw_text = ""
-
-            if response.results:
-                alternatives = response.results[0].alternatives
-                if alternatives:
-                    highest_confidence_text = alternatives[0].transcript if len(alternatives) > 0 else ""
-                    most_raw_text = alternatives[1].transcript if len(alternatives) > 1 else highest_confidence_text
-            else:
-                logger.error(f"No results in speech recognition response: {response}")
-
-
-            if not highest_confidence_text and response.results:
-                highest_confidence_text = response.results[0].alternatives[0].transcript if response.results[0].alternatives else ""
-                most_raw_text = response.results[0].alternatives[1].transcript if len(response.results[0].alternatives) > 1 else highest_confidence_text
-            # 수정된 부분 끝
-        else:
-            highest_confidence_text = ""
-            most_raw_text = ""
-
-
-    def handle_audio_analysis(self, request):
-        question_list_id = request.data.get('question_list_id')
-        if not question_list_id:
-            return Response({"error": "question_list_id is required"}, status=400)
-
-        question_list = get_object_or_404(QuestionLists, id=question_list_id)
-        
-        try:
-            # 오디오 파일 확인
-            audio_files = [request.FILES.get(f'audio_{i}') for i in range(1, 11) if request.FILES.get(f'audio_{i}')]
-
-            if not audio_files:
-                return Response({"error": "Audio files not provided"}, status=400)
-            
-            # 오디오 파일들을 하나로 병합 및 모노로 변환
-            combined_audio_segments = []
-            for audio_file in audio_files:
-                audio_temp_path = os.path.join(settings.MEDIA_ROOT, audio_file.name)
-                with open(audio_temp_path, 'wb') as f:
-                    f.write(audio_file.read())
-
-                # mp3 파일을 wav 파일로 변환
-                audio_segment = AudioSegment.from_file(audio_temp_path, format="mp3")
-                combined_audio_segments.append(audio_segment.set_channels(1))  # 모노로 변환
-
-            combined_audio = sum(combined_audio_segments)
-            sample_rate = combined_audio.frame_rate
-
-            combined_audio_path = os.path.join(settings.MEDIA_ROOT, 'combined_audio.wav')
-            combined_audio.export(combined_audio_path, format='wav')
-
-            logger.debug(f"Combined audio path: {combined_audio_path}")
-
-            # 발음 분석 결과 가져오기
-            pronunciation_result, highest_confidence_text, average_similarity, pronunciation_message = self.analyze_pronunciation(combined_audio_path, sample_rate=sample_rate)
-
-            logger.debug(f"Pronunciation result: {pronunciation_result}")
-            logger.debug(f"Highest confidence text: {highest_confidence_text}")
-
-            # 피치 분석 결과 가져오기
-            pitch_result, intensity_result, pitch_graph_base64, intensity_graph_base64, intensity_message, pitch_message = self.analyze_pitch(combined_audio_path)
-
-            logger.debug(f"Pitch result: {pitch_result}")
-            logger.debug(f"Intensity result: {intensity_result}")
-
-            # 인터뷰 응답 객체 생성 및 저장
-            interview_response = InterviewAnalysis(
-                user=request.user,
-                question_list=question_list,
-                pronunciation_similarity=str(pronunciation_result),
-                pitch_analysis=str(pitch_result),
-                intensity_analysis=str(intensity_result),
-                pronunciation_message=pronunciation_message,
-                pitch_message=pitch_message,
-                intensity_message=intensity_message
-            )
-            interview_response.save()
-
-            # JSON 형식의 결과 반환
-            return Response({
-                "interview_id": interview_response.id,
-                "pronunciation_similarity": pronunciation_result,
-                "highest_confidence_text": highest_confidence_text,
-                "average_similarity": average_similarity,
-                "pitch_analysis": pitch_result,
-                "intensity_analysis": intensity_result,
-                "pitch_graph": pitch_graph_base64,
-                "intensity_graph": intensity_graph_base64,
-                "intensity_message": intensity_message,
-                "pitch_message": pitch_message,
-                "pronunciation_message": pronunciation_message
-            }, status=200)
-
-        except FileNotFoundError as e:
-            logger.error(f"File not found: {str(e)}")
-            return Response({"error": "File not found", "details": str(e)}, status=500)
-        except PermissionError as e:
-            logger.error(f"Permission denied: {str(e)}")
-            return Response({"error": "Permission denied", "details": str(e)}, status=500)
-        # except Exception as e:
-        #     logger.error(f"Unexpected error in VoiceAPIView: {str(e)}")
-        #     return Response({"error": "Internal Server Error", "details": str(e)}, status=500)
-
-    def combine_audio_files(self, audio_files):
-        """여러 개의 오디오 파일을 하나로 병합하고 모노로 변환"""
         combined = AudioSegment.empty()
-        sample_rate = None
+        for file_data in temp_file_data:
+            file_data = base64.b64decode(file_data.encode('utf-8'))  # Base64 디코딩 후 바이너리 데이터 처리
+            audio = AudioSegment.from_file(BytesIO(file_data), format="mp3")
+            combined += audio
 
-        for audio_file in audio_files:
-            audio_segment = AudioSegment.from_file(audio_file)
-            audio_segment = audio_segment.set_channels(1)  # 모노로 변환
+        # 병합된 파일을 WAV 형식으로 변환
+        wav_file = BytesIO()
+        combined.export(wav_file, format="wav")
+        wav_file.seek(0)
+        
+        # 임시 파일에 저장
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_wav_file:
+            temp_wav_file.write(wav_file.read())
+            temp_wav_file_path = temp_wav_file.name
 
-            if sample_rate is None:
-                sample_rate = audio_segment.frame_rate
-            elif sample_rate != audio_segment.frame_rate:
-                audio_segment = audio_segment.set_frame_rate(sample_rate)  # 프레임 레이트를 통일
+        # WAV 파일을 모노로 변환
+        audio_segment = AudioSegment.from_file(wav_file, format="wav")
+        audio_segment = audio_segment.set_channels(1)
+        wav_file = BytesIO()
+        audio_segment.export(wav_file, format="wav")
+        wav_file.seek(0)
 
-            combined += audio_segment
-        return combined, sample_rate
-
-    def analyze_pronunciation(self, audio_file_path, most_raw_text=None, highest_confidence_text=None, question_id=None, sample_rate=None):  
-        """음성 파일의 발음 분석을 수행합니다."""
-        with open(audio_file_path, 'rb') as audio_file:
-            audio_content = audio_file.read()
-        logger.debug(f"Audio content length: {len(audio_content)}")
-
-        audio = RecognitionAudio(content=audio_content)
-        config = RecognitionConfig(
-            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-            sample_rate_hertz=sample_rate,  
-            language_code='ko-KR',
-            enable_automatic_punctuation=True,
-            max_alternatives=2  # 2개의 대안을 요청
+        # 분석 작업
+        analysis_result = self.analyze_audio(temp_wav_file_path)
+        
+        # 임시 파일 삭제
+        os.remove(temp_wav_file_path)
+        
+        # 데이터베이스에 분석 결과 저장
+        interview_analysis = InterviewAnalysis.objects.create(
+            user=request.user,
+            pitch_graph=analysis_result["pitch_graph"],
+            intensity_graph=analysis_result["intensity_graph"],
+            pitch_summary=analysis_result["pitch_summary"],
+            intensity_summary=analysis_result["intensity_summary"],
         )
 
-        client = speech.SpeechClient(credentials=credentials)
-        try:
-            operation = client.long_running_recognize(config=config, audio=audio)
-            response = operation.result(timeout=90)
-        except Exception as e:
-            logger.error(f"Error in long_running_recognize: {str(e)}")
-            raise e
+        return Response(analysis_result, status=status.HTTP_200_OK)
 
-        logger.debug(f"Pronunciation response results: {response.results}")
-        if response.results:
-            try:
-                highest_confidence_text = response.results[0].alternatives[0].transcript if len(response.results[0].alternatives) > 0 else ""
-                most_raw_text = response.results[0].alternatives[1].transcript if len(response.results[0].alternatives) > 1 else highest_confidence_text
-            except IndexError as e:
-                logger.error(f"IndexError in pronunciation analysis: {str(e)}")
-                logger.error(f"Response content: {response}")
-                highest_confidence_text = ""
-                most_raw_text = ""
-        else:
-            highest_confidence_text = ""
-            most_raw_text = ""
+    def analyze_audio(self, wav_file_path):
+        snd = parselmouth.Sound(wav_file_path)
+        pitch = snd.to_pitch()
+        intensity = snd.to_intensity()
 
-        expected_sentences = re.split(r'[.!?]', most_raw_text)
-        received_sentences = re.split(r'[.!?]', highest_confidence_text)
-
-        pronunciation_result = []
-        total_similarity = 0
-        num_sentences = 0
-
-        for expected_sentence, received_sentence in zip(expected_sentences, received_sentences):
-            similarity = difflib.SequenceMatcher(None, expected_sentence.strip(), received_sentence.strip()).ratio()
-            total_similarity += similarity
-            num_sentences += 1
-            highlighted_received_sentence = self.highlight_differences(expected_sentence.strip(), received_sentence.strip(), similarity)
-            pronunciation_result.append({
-                'question_id': question_id,  # question_id 추가
-                '실제 발음': expected_sentence.strip(),
-                '기대 발음': highlighted_received_sentence,
-                '유사도': similarity
-            })
-
-        average_similarity = total_similarity / num_sentences if num_sentences > 0 else 0
-
-        # 발음 유사도에 따른 메시지
-        if average_similarity >= 0.91:
-            pronunciation_message = "훌륭한 발음을 보여주셨습니다. 면접관들에게 전달하고자 하는 메시지를 명확하게 전달할 수 있는 발음입니다. 이대로 계속 연습하면 좋은 결과가 있을 것입니다."
-        elif 0.81 <= average_similarity < 0.91:
-            pronunciation_message = "발음이 전반적으로 괜찮습니다만, 일부 단어에서 조금 더 명확하게 발음하려는 노력이 필요할 것 같습니다. 특히 긴장하거나 빠르게 말할 때 발음이 흐려질 수 있으니, 천천히 말하며 연습해 보세요."
-        else:
-            pronunciation_message = "발음 연습이 조금 더 필요해 보입니다. 면접관에게 전달하고자 하는 메시지를 명확하게 전달하기 위해 중요한 단어들을 뚜렷하게 발음하는 연습을 추천드립니다. 꾸준한 연습을 통해 발음을 개선해 나가면 좋겠습니다."
-
-        return pronunciation_result, highest_confidence_text, average_similarity, pronunciation_message
-
-    def highlight_differences(self, expected_sentence, received_sentence, similarity):
-        """예상 문장과 받은 문장의 차이점을 강조합니다."""
-        if similarity > 0.9:
-            return received_sentence  # similarity가 0.9 이상이면 강조하지 않음
-
-        sequence_matcher = difflib.SequenceMatcher(None, expected_sentence, received_sentence)
-        highlighted_received_sentence = ""
-        for opcode, a0, a1, b0, b1 in sequence_matcher.get_opcodes():
-            if opcode == 'equal':
-                highlighted_received_sentence += received_sentence[b0:b1]
-            elif opcode == 'replace' or opcode == 'insert':
-                highlighted_received_sentence += f"<span style='color:blue;'>{received_sentence[b0:b1]}</span>"
-            elif opcode == 'delete':
-                highlighted_received_sentence += f"<span style='color:blue;'></span>"
-        return highlighted_received_sentence
-
-    def analyze_pitch(self, audio_file_path):
-        """음성 파일의 피치 분석을 수행하고 그래프를 생성합니다."""
-        set_korean_font()  # 한글 폰트 설정
-
-        sound = parselmouth.Sound(audio_file_path)
-
-        pitch = sound.to_pitch()
         pitch_values = pitch.selected_array['frequency']
-        pitch_times = pitch.xs()
-
-        intensity = sound.to_intensity()
         intensity_values = intensity.values.T
-        intensity_times = intensity.xs()
 
-        # 0이 아닌 피치 값과 강도 값 필터링
-        non_zero_pitch_values = pitch_values[pitch_values > 0]
-        non_zero_intensity_values = intensity_values[intensity_values > 0]
+        pitch_mean = np.mean(pitch_values[pitch_values > 0])
+        intensity_mean = np.mean(intensity_values)
 
         # 피치 그래프 생성
-        fig, ax1 = plt.subplots(figsize=(12, 4))
-        ax1.plot(pitch_times / 60, pitch_values, 'o', markersize=2, label='강도')
-        ax1.plot(pitch_times / 60, np.where((pitch_values >= 150) & (pitch_values <= 500), pitch_values, np.nan), 'o', markersize=2, color='blue', label='일반적(150-500Hz)')
-        ax1.plot(pitch_times / 60, np.where((pitch_values < 150) | (pitch_values > 500), pitch_values, np.nan), 'o', markersize=2, color='red', label='범위 밖')
-        ax1.set_xlabel('시간(분)')
-        ax1.set_ylabel('피치(Hz)')
-        ax1.set_title('피치')
-        ax1.set_xlim([0, max(pitch_times / 60)])
-        ax1.set_ylim([0, 500])
-        ax1.grid(True)
-        ax1.legend()
-        ax1.set_xticks(np.arange(0, max(pitch_times / 60), 1))
-
-        buf = io.BytesIO()
-        plt.tight_layout()
-        plt.savefig(buf, format='png')
-        buf.seek(0)
-        pitch_graph_base64 = base64.b64encode(buf.read()).decode('utf-8')
-        buf.close()
-        plt.close(fig)
+        pitch_fig, pitch_ax = plt.subplots()
+        pitch_ax.plot(pitch.xs(), pitch_values, 'o', markersize=2)
+        pitch_ax.set_xlabel("Time [s]")
+        pitch_ax.set_ylabel("Pitch [Hz]")
+        pitch_ax.set_title("Pitch Analysis")
+        pitch_graph = self.fig_to_base64(pitch_fig)
 
         # 강도 그래프 생성
-        fig, ax2 = plt.subplots(figsize=(12, 4))
-        ax2.plot(intensity_times / 60, intensity_values, linewidth=1, label='강도')
-        ax2.plot(intensity_times / 60, np.where((intensity_values >= 35) & (intensity_values <= 65), intensity_values, np.nan), linewidth=1, color='blue', label='일반적(35-65db)')
-        ax2.plot(intensity_times / 60, np.where((intensity_values < 35) | (intensity_values > 65), intensity_values, np.nan), linewidth=1, color='red', label='범위 밖')
-        ax2.set_xlabel('시간(분)')
-        ax2.set_ylabel('강도(dB)')
-        ax2.set_title('강도')
-        ax2.set_xlim([0, max(intensity_times / 60)])
-        ax2.set_ylim([0, max(intensity_values)])
-        ax2.grid(True)
-        ax2.legend()
-        ax2.set_xticks(np.arange(0, max(intensity_times / 60), 1))
+        intensity_fig, intensity_ax = plt.subplots()
+        intensity_ax.plot(intensity.xs(), intensity_values, 'o', markersize=2)
+        intensity_ax.set_xlabel("Time [s]")
+        intensity_ax.set_ylabel("Intensity [dB]")
+        intensity_ax.set_title("Intensity Analysis")
+        intensity_graph = self.fig_to_base64(intensity_fig)
 
-        buf = io.BytesIO()
-        plt.tight_layout()
-        plt.savefig(buf, format='png')
+        # 총평 생성
+        pitch_summary = self.get_pitch_summary(pitch_mean)
+        intensity_summary = self.get_intensity_summary(intensity_mean)
+
+        analysis_result = {
+            "pitch_graph": pitch_graph,
+            "intensity_graph": intensity_graph,
+            "pitch_summary": pitch_summary,
+            "intensity_summary": intensity_summary,
+        }
+
+        return analysis_result
+
+    def fig_to_base64(self, fig):
+        buf = BytesIO()
+        fig.savefig(buf, format="png")
         buf.seek(0)
-        intensity_graph_base64 = base64.b64encode(buf.read()).decode('utf-8')
-        buf.close()
+        fig_data = base64.b64encode(buf.read()).decode('utf-8')
         plt.close(fig)
+        return fig_data
 
-        pitch_result = {
-            'times': (pitch_times / 60).tolist(),  # 분 단위로 변환
-            'values': pitch_values.tolist(),
-            'min_value': float(np.min(non_zero_pitch_values)),
-            'max_value': float(np.max(non_zero_pitch_values)),
-            'average_value': float(np.mean(non_zero_pitch_values))
-        }
-
-        intensity_result = {
-            'times': (intensity_times / 60).tolist(),  # 분 단위로 변환
-            'values': intensity_values.tolist(),
-            'min_value': float(np.min(non_zero_intensity_values)),
-            'max_value': float(np.max(non_zero_intensity_values)),
-            'average_value': float(np.mean(non_zero_intensity_values))
-        }
-
-        # 강도 평균값 평가
-        intensity_avg = intensity_result['average_value']
-        if intensity_avg >= 35 and intensity_avg <= 65:
-            intensity_message = "목소리 크기가 적당합니다. 면접관이 듣기 좋은 수준의 목소리를 가지고 계십니다. 이 크기로 계속 연습하시면 좋을 것입니다."
-        elif intensity_avg < 35:
-            intensity_message = "목소리가 다소 작은 편입니다. 면접관에게 자신감 있는 모습을 보여주기 위해 조금 더 크게 말해 보세요. 목소리 크기를 키우는 연습을 통해 더욱 당당한 인상을 줄 수 있습니다."
+    def get_pitch_summary(self, pitch_mean):
+        if pitch_mean >= 450:
+            return "님 시끄러움"
+        elif pitch_mean >= 150:
+            return "님은 평범함 ㅇㅇ"
         else:
-            intensity_message = "목소리가 다소 큰 편입니다. 조금만 더 부드럽고 차분하게 말하면 좋을 것 같습니다. 면접관에게 강한 인상을 주는 것도 좋지만, 너무 큰 목소리는 오히려 부담을 줄 수 있습니다."
+            return "개미소리"
 
-        # 피치 평균값 평가
-        pitch_avg = pitch_result['average_value']
-        if pitch_avg >= 150 and pitch_avg <= 450:
-            pitch_message = "말씀하시는 속도가 적당합니다. 면접관이 이해하기 쉬운 속도로 말하고 계십니다. 이 속도로 계속 연습하시면 좋을 결과가 있을 것입니다."
-        elif pitch_avg < 150:
-            pitch_message = "말씀하시는 속도가 다소 느린 편입니다. 조금 더 빠르게 말하면 면접관의 집중력을 유지하는 데 도움이 될 것입니다. 적당한 속도를 유지하며 자연스럽게 말하는 연습을 추천드립니다."
+    def get_intensity_summary(self, intensity_mean):
+        if intensity_mean >= 65:
+            return "빠르게 말하고 계시네요"
+        elif intensity_mean >= 35:
+            return "님의 말하기 속도는 평범해요"
         else:
-            pitch_message = "말씀하시는 속도가 조금 빠른 편입니다. 천천히 말하면 면접관이 더 잘 이해할 수 있고, 자신감 있는 모습을 보일 수 있습니다. 천천히 말하는 연습을 통해 전달력을 높여 보세요."
-
-        return pitch_result, intensity_result, pitch_graph_base64, intensity_graph_base64, intensity_message, pitch_message
+            return "님은 아주 느리게 말함"

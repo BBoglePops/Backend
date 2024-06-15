@@ -72,23 +72,14 @@ class InterviewAnalysis(models.Model):
 
     # 이서 필드
     # 음성 분석 결과 저장을 위한 필드 추가
-    pronunciation_similarity = models.TextField(null=True, blank=True)
-    pitch_analysis = models.TextField(null=True, blank=True)
-    intensity_analysis = models.TextField(null=True, blank=True)
-    pronunciation_message = models.TextField(null=True, blank=True)
-    pitch_message = models.TextField(null=True, blank=True)
-    intensity_message = models.TextField(null=True, blank=True)
-    response_audio_1 = models.FileField(upload_to='audios/', null=True, blank=True)
-    response_audio_2 = models.FileField(upload_to='audios/', null=True, blank=True)
-    response_audio_3 = models.FileField(upload_to='audios/', null=True, blank=True)
-    response_audio_4 = models.FileField(upload_to='audios/', null=True, blank=True)
-    response_audio_5 = models.FileField(upload_to='audios/', null=True, blank=True)
-    response_audio_6 = models.FileField(upload_to='audios/', null=True, blank=True)
-    response_audio_7 = models.FileField(upload_to='audios/', null=True, blank=True)
-    response_audio_8 = models.FileField(upload_to='audios/', null=True, blank=True)
-    response_audio_9 = models.FileField(upload_to='audios/', null=True, blank=True)
-    response_audio_10 = models.FileField(upload_to='audios/', null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)  # 생성 시각 자동 저장
-
+         # 이서 필드
+   
+    pitch_graph = models.TextField(blank=True, null=True)  # Base64 인코딩된 이미지 데이터를 텍스트 필드에 저장
+    intensity_graph = models.TextField(blank=True, null=True)  # Base64 인코딩된 이미지 데이터를 텍스트 필드에 저장
+    pitch_summary = models.CharField(max_length=255, blank=True, null=True)
+    intensity_summary = models.CharField(max_length=255, blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
     def __str__(self):
-        return f'Responses for {self.question_list.id}'
+        return f"InterviewAnalysis for {self.user.username} at {self.created_at}"
