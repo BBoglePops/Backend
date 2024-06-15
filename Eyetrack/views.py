@@ -180,7 +180,7 @@ class VideoUploadView(APIView):
         if file_serializer.is_valid():
             video = file_serializer.save()
             user_id = request.data.get('user_id')
-            interview_id = request.data.get('interview_id')
+            interview_id = request.data.get('interviewId')
             question_id = request.data.get('question_id')
             video_url = video.file.url
 
