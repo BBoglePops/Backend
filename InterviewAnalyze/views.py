@@ -199,7 +199,6 @@ class VoiceAPIView(APIView):
         else:
             return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)  # 유효하지 않은 action 처리
 
-    
     # 음성 파일 받기
     def upload_file(self, request):
         uploaded_files = request.FILES.getlist('files')
@@ -211,21 +210,26 @@ class VoiceAPIView(APIView):
         for file in uploaded_files:
             temp_file_data.append(file.read())
             
-        return Response({"file_data": [base64.b64encode(data).decode('utf-8') for data in temp_file_data]}, status=status.HTTP_201_CREATED) # 바이너리로 읽기
-
-        #return Response({"file_data": temp_file_data}, status=status.HTTP_201_CREATED)
+        return Response({"file_data": [base64.b64encode(data).decode('utf-8') for data in temp_file_data]}, status=status.HTTP_201_CREATED)
 
     def merge_files_and_analyze(self, request):
-        #try:
-            temp_file_data = request.data.get('file_data')
-            if not temp_file_data:
-                return Response({"error": "No files to merge"}, status=status.HTTP_400_BAD_REQUEST)
+        temp_file_data = request.data.get('file_data')
+        if not temp_file_data:
+            return Response({"error": "No files to merge"}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Ensure temp_file_data is a list and not empty
+        if not isinstance(temp_file_data, list) or len(temp_file_data) == 0:
+            return Response({"error": "Invalid file data format or no data provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
             combined = AudioSegment.empty()
-            for file_data in temp_file_data:
-                file_data = base64.b64decode(file_data.encode('utf-8'))  # Base64 디코딩 후 바이너리 데이터 처리
-                audio = AudioSegment.from_file(BytesIO(file_data), format="mp3")
-                combined += audio
+            for i, file_data in enumerate(temp_file_data):
+                try:
+                    file_data = base64.b64decode(file_data.encode('utf-8'))
+                    audio = AudioSegment.from_file(BytesIO(file_data), format="mp3")
+                    combined += audio
+                except Exception as e:
+                    return Response({"error": f"Error processing file index {i}: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
             # 병합된 파일을 WAV 형식으로 변환
             wav_file = BytesIO()
@@ -238,7 +242,7 @@ class VoiceAPIView(APIView):
                 temp_wav_file_path = temp_wav_file.name
 
             # WAV 파일을 모노로 변환
-            audio_segment = AudioSegment.from_file(wav_file, format="wav")
+            audio_segment = AudioSegment.from_file(temp_wav_file_path, format="wav")
             audio_segment = audio_segment.set_channels(1)
             wav_file = BytesIO()
             audio_segment.export(wav_file, format="wav")
@@ -260,8 +264,8 @@ class VoiceAPIView(APIView):
             )
 
             return Response(analysis_result, status=status.HTTP_200_OK)
-        #except Exception as e:
-        #    return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def analyze_audio(self, wav_file_path):
         snd = parselmouth.Sound(wav_file_path)
@@ -326,5 +330,3 @@ class VoiceAPIView(APIView):
             return "님의 말하기 속도는 평범해요"
         else:
             return "님은 아주 느리게 말함"
-
-
