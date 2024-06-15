@@ -209,9 +209,10 @@ class VoiceAPIView(APIView):
         # 파일 데이터를 메모리에 저장
         temp_file_data = []
         for file in uploaded_files:
-            temp_file_data.append(file.read())
+            file_data = file.read()
+            temp_file_data.append(base64.b64encode(file_data).decode('utf-8'))
             
-        return Response({"file_data": [base64.b64encode(data).decode('utf-8') for data in temp_file_data]}, status=status.HTTP_201_CREATED)
+        return Response({"file_data": temp_file_data}, status=status.HTTP_201_CREATED)
 
     def merge_files_and_analyze(self, request):
         temp_file_data = request.data.get('file_data')
