@@ -53,6 +53,15 @@ import requests
 import re
 import time
 
+from rest_framework import status
+from pydub import AudioSegment
+from io import BytesIO
+import parselmouth
+import matplotlib.pyplot as plt
+import numpy as np
+import base64
+import tempfile 
+
 logger = logging.getLogger(__name__)
 
 
@@ -207,7 +216,7 @@ class VoiceAPIView(APIView):
         #return Response({"file_data": temp_file_data}, status=status.HTTP_201_CREATED)
 
     def merge_files_and_analyze(self, request):
-        try:
+        #try:
             temp_file_data = request.data.get('file_data')
             if not temp_file_data:
                 return Response({"error": "No files to merge"}, status=status.HTTP_400_BAD_REQUEST)
@@ -251,8 +260,8 @@ class VoiceAPIView(APIView):
             )
 
             return Response(analysis_result, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        #except Exception as e:
+        #    return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def analyze_audio(self, wav_file_path):
         snd = parselmouth.Sound(wav_file_path)
@@ -317,3 +326,5 @@ class VoiceAPIView(APIView):
             return "님의 말하기 속도는 평범해요"
         else:
             return "님은 아주 느리게 말함"
+
+
