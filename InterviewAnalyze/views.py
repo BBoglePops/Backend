@@ -220,6 +220,11 @@ class VoiceAPIView(APIView):
         # Ensure temp_file_data is a list and not empty
         if not isinstance(temp_file_data, list) or len(temp_file_data) == 0:
             return Response({"error": "Invalid file data format or no data provided"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 로깅 추가 400 
+        for i, file_data in enumerate(temp_file_data):
+            if not file_data:
+                return Response({"error": f"File data at index {i} is empty or invalid"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             combined = AudioSegment.empty()
