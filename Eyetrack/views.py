@@ -17,10 +17,18 @@ from rest_framework.response import Response
 from rest_framework import status
 from .serializers import VideoSerializer
 from django.conf import settings
+from google.cloud import storage
 
 logger = logging.getLogger(__name__)
 permission_classes = [IsAuthenticated]
 gaze_sessions = {}
+
+def download_video_from_gcs(video_url, local_path):
+    client = storage.Client()
+    bucket_name, blob_name = video_url.replace('https://storage.googleapis.com/', '').split('/', 1)
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(blob_name)
+    blob.download_to_filename(local_path)
 
 def start_gaze_tracking_view(request, user_id, interview_id, question_id):
     key = f"{user_id}_{interview_id}_{question_id}"
@@ -30,21 +38,24 @@ def start_gaze_tracking_view(request, user_id, interview_id, question_id):
         return JsonResponse({"message": "Session not found","log_message": f"Session not found for key: {key}"}, status=404)
     
     gaze_session = gaze_sessions[key]
-    video_path = gaze_session.video_path
-    if not video_path:
-        return JsonResponse({"message": "Video path not found"}, status=404)
+    video_url = gaze_session.video_url
+    if not video_url:
+        return JsonResponse({"message": "Video URL not found"}, status=404)
+    
+    local_video_path = os.path.join(settings.MEDIA_ROOT, 'temp_video.mp4')
+    download_video_from_gcs(video_url, local_video_path)
+    
     try:
-        gaze_session.start_eye_tracking(video_path)
+        gaze_session.start_eye_tracking(local_video_path)
     except Exception as e:
         return JsonResponse({"message": str(e)}, status=500)
     
     try:
-        ##################################
         # Display the video frames using OpenCV
-        cap = cv2.VideoCapture(video_path)
+        cap = cv2.VideoCapture(local_video_path)
         if not cap.isOpened():
             return JsonResponse({"message": "Cannot open video file"}, status=500)
-        while(cap.isOpened()):
+        while cap.isOpened():
             ret, frame = cap.read()
             if ret:
                 cv2.imshow('Gaze Tracking Video', frame)
@@ -54,7 +65,6 @@ def start_gaze_tracking_view(request, user_id, interview_id, question_id):
                 break
         cap.release()
         cv2.destroyAllWindows()
-        ########################
     except Exception as e:
         return JsonResponse({"message": f"Error displaying video: {str(e)}"}, status=500)
 
@@ -128,7 +138,7 @@ def stop_gaze_tracking_view(request, user_id, interview_id, question_id):
     section_data = pd.read_csv(csv_filename)
     section_counts = dict(zip(section_data["Section"], section_data["Count"]))
 
-    image_path = os.path.join(settings.BASE_DIR, "Eyetrack/0518/image.png")
+    image_path = os.path.join(settings.BASE_DIR, "Eyetrack", "0518", "image.png")
     original_image = cv2.imread(image_path)
 
     if original_image is None:
@@ -149,9 +159,9 @@ def stop_gaze_tracking_view(request, user_id, interview_id, question_id):
         feedback=feedback
     )
     
-    video_path = gaze_sessions[key].video_path
-    if os.path.exists(video_path):
-        os.remove(video_path)
+    local_video_path = os.path.join(settings.MEDIA_ROOT, 'temp_video.mp4')
+    if os.path.exists(local_video_path):
+        os.remove(local_video_path)
 
     del gaze_sessions[key]
 
@@ -171,17 +181,16 @@ class VideoUploadView(APIView):
             video = file_serializer.save()
             user_id = request.data.get('user_id')
             interview_id = request.data.get('interview_id')
-            question_id = request.data.get('question_id')  # Add this line to get question_id
-            video_path = video.file.path
+            question_id = request.data.get('question_id')
+            video_url = video.file.url
 
-            key = f"{user_id}_{interview_id}_{question_id}"  # Modify the key to include question_id
+            key = f"{user_id}_{interview_id}_{question_id}"
             gaze_sessions[key] = GazeTrackingSession()
-            gaze_sessions[key].video_path = video_path
+            gaze_sessions[key].video_url = video_url
 
             # Log the session addition
             logger.info(f"Session added for key: {key}")
 
-            return JsonResponse({"message": "Video uploaded successfully","log_message": f"Session added for key: {key}"}, status=201)
+            return JsonResponse({"message": "Video uploaded successfully", "log_message": f"Session added for key: {key}"}, status=201)
         else:
             return JsonResponse(file_serializer.errors, status=400)
-
