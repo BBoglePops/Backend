@@ -4,7 +4,7 @@ from django.conf import settings
 
 class InterviewAnalysis(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    question_list = models.ForeignKey(QuestionLists, on_delete=models.CASCADE)  # QuestionLists 모델 참조
+    question_list = models.ForeignKey(QuestionLists, on_delete=models.CASCADE, null=True)  # QuestionLists 모델 참조
 
     response_1 = models.TextField(blank=True, null=True)
     redundancies_1 = models.TextField(blank=True, null=True)
