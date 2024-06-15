@@ -207,49 +207,52 @@ class VoiceAPIView(APIView):
         #return Response({"file_data": temp_file_data}, status=status.HTTP_201_CREATED)
 
     def merge_files_and_analyze(self, request):
-        temp_file_data = request.data.get('file_data')
-        if not temp_file_data:
-            return Response({"error": "No files to merge"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            temp_file_data = request.data.get('file_data')
+            if not temp_file_data:
+                return Response({"error": "No files to merge"}, status=status.HTTP_400_BAD_REQUEST)
 
-        combined = AudioSegment.empty()
-        for file_data in temp_file_data:
-            file_data = base64.b64decode(file_data.encode('utf-8'))  # Base64 디코딩 후 바이너리 데이터 처리
-            audio = AudioSegment.from_file(BytesIO(file_data), format="mp3")
-            combined += audio
+            combined = AudioSegment.empty()
+            for file_data in temp_file_data:
+                file_data = base64.b64decode(file_data.encode('utf-8'))  # Base64 디코딩 후 바이너리 데이터 처리
+                audio = AudioSegment.from_file(BytesIO(file_data), format="mp3")
+                combined += audio
 
-        # 병합된 파일을 WAV 형식으로 변환
-        wav_file = BytesIO()
-        combined.export(wav_file, format="wav")
-        wav_file.seek(0)
-        
-        # 임시 파일에 저장
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_wav_file:
-            temp_wav_file.write(wav_file.read())
-            temp_wav_file_path = temp_wav_file.name
+            # 병합된 파일을 WAV 형식으로 변환
+            wav_file = BytesIO()
+            combined.export(wav_file, format="wav")
+            wav_file.seek(0)
+            
+            # 임시 파일에 저장
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_wav_file:
+                temp_wav_file.write(wav_file.read())
+                temp_wav_file_path = temp_wav_file.name
 
-        # WAV 파일을 모노로 변환
-        audio_segment = AudioSegment.from_file(wav_file, format="wav")
-        audio_segment = audio_segment.set_channels(1)
-        wav_file = BytesIO()
-        audio_segment.export(wav_file, format="wav")
-        wav_file.seek(0)
+            # WAV 파일을 모노로 변환
+            audio_segment = AudioSegment.from_file(wav_file, format="wav")
+            audio_segment = audio_segment.set_channels(1)
+            wav_file = BytesIO()
+            audio_segment.export(wav_file, format="wav")
+            wav_file.seek(0)
 
-        # 분석 작업
-        analysis_result = self.analyze_audio(temp_wav_file_path)
-        
-        # 임시 파일 삭제
-        os.remove(temp_wav_file_path)
-        
-        # 데이터베이스에 분석 결과 저장
-        interview_analysis = InterviewAnalysis.objects.create(
-            user=request.user,
-            pitch_graph=analysis_result["pitch_graph"],
-            intensity_graph=analysis_result["intensity_graph"],
-            pitch_summary=analysis_result["pitch_summary"],
-            intensity_summary=analysis_result["intensity_summary"],
-        )
+            # 분석 작업
+            analysis_result = self.analyze_audio(temp_wav_file_path)
+            
+            # 임시 파일 삭제
+            os.remove(temp_wav_file_path)
+            
+            # 데이터베이스에 분석 결과 저장
+            interview_analysis = InterviewAnalysis.objects.create(
+                user=request.user,
+                pitch_graph=analysis_result["pitch_graph"],
+                intensity_graph=analysis_result["intensity_graph"],
+                pitch_summary=analysis_result["pitch_summary"],
+                intensity_summary=analysis_result["intensity_summary"],
+            )
 
-        return Response(analysis_result, status=status.HTTP_200_OK)
+            return Response(analysis_result, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def analyze_audio(self, wav_file_path):
         snd = parselmouth.Sound(wav_file_path)
