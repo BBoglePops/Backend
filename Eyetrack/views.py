@@ -25,7 +25,7 @@ gaze_sessions = {}
 
 def download_video_from_gcs(video_url, local_path):
     client = storage.Client()
-    bucket_name, blob_name = video_url.replace('https://storage.googleapis.com/', '').split('/', 1)
+    bucket_name, blob_name = video_url.replace('gs://', '').split('/', 1)
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(blob_name)
     blob.download_to_filename(local_path)
@@ -33,8 +33,6 @@ def download_video_from_gcs(video_url, local_path):
 def start_gaze_tracking_view(request, user_id, interview_id, question_id):
     key = f"{user_id}_{interview_id}_{question_id}"
     if key not in gaze_sessions:
-        # Log the missing session
-        logger.warning(f"Session not found for key: {key}")
         return JsonResponse({"message": "Session not found","log_message": f"Session not found for key: {key}"}, status=404)
     
     gaze_session = gaze_sessions[key]
@@ -42,13 +40,18 @@ def start_gaze_tracking_view(request, user_id, interview_id, question_id):
     if not video_url:
         return JsonResponse({"message": "Video URL not found"}, status=404)
     
-    local_video_path = os.path.join(settings.MEDIA_ROOT, 'temp_video.mp4')
-    download_video_from_gcs(video_url, local_video_path)
+    local_video_path = os.path.join(settings.MEDIA_ROOT, 'input.webm')
+
+    try:
+        download_video_from_gcs(video_url, local_video_path)
+    except Exception as e:
+        # GCS에서 파일 다운로드 중 오류 발생 시 500 에러 반환
+        return JsonResponse({"message": f"Error downloading video: {str(e)}"}, status=500)
     
     try:
         gaze_session.start_eye_tracking(local_video_path)
     except Exception as e:
-        return JsonResponse({"message": str(e)}, status=500)
+        return JsonResponse({"message": f"Error processing video: {str(e)}"}, status=500)
     
     try:
         # Display the video frames using OpenCV
