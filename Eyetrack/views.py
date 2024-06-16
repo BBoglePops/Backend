@@ -24,11 +24,23 @@ permission_classes = [IsAuthenticated]
 gaze_sessions = {}
 
 def download_video_from_gcs(video_url, local_path):
-    client = storage.Client()
-    bucket_name, blob_name = video_url.replace('gs://', '').split('/', 1)
-    bucket = client.bucket(bucket_name)
-    blob = bucket.blob(blob_name)
-    blob.download_to_filename(local_path)
+    try:
+        if video_url.startswith('https://storage.googleapis.com/'):
+            video_url = video_url.replace('https://storage.googleapis.com/', 'gs://')
+        elif not video_url.startswith('gs://'):
+            raise ValueError("Invalid video URL format")
+
+        # 버킷 이름과 객체 이름을 추출
+        gs_prefix = 'gs://'
+        bucket_name, blob_name = video_url[len(gs_prefix):].split('/', 1)
+
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(blob_name)
+        blob.download_to_filename(local_path)
+    except Exception as e:
+        logger.error(f"Error downloading video from GCS: {str(e)}")
+        raise
 
 def start_gaze_tracking_view(request, user_id, interview_id, question_id):
     key = f"{user_id}_{interview_id}_{question_id}"
