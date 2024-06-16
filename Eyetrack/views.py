@@ -202,12 +202,12 @@ class VideoUploadView(APIView):
 
             # GCS에 파일 업로드
             file_obj = video.file
-            bucket_name = settings.GCS_BUCKET_NAME
+            bucket_name = settings.GS_BUCKET_NAME
             destination_blob_name = f"videos/{user_id}/{interview_id}/{question_id}/input.webm"
             try:
                 video_url = upload_video_to_gcs(file_obj, bucket_name, destination_blob_name)
             except Exception as e:
-                logger.error(f"Error uploading video to GCS: {str(e)}")
+                logger.error(f"Error uploading video to GS: {str(e)}")
                 return JsonResponse({"message": f"Error uploading video: {str(e)}"}, status=500)
 
             key = f"{user_id}_{interview_id}_{question_id}"
