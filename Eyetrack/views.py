@@ -162,7 +162,7 @@ def stop_gaze_tracking_view(request, user_id, interview_id, question_id):
         feedback=feedback
     )
     
-    local_video_path = os.path.join(settings.MEDIA_ROOT, 'temp_video.mp4')
+    local_video_path = os.path.join(settings.MEDIA_ROOT, 'input.webm')
     if os.path.exists(local_video_path):
         os.remove(local_video_path)
 
@@ -173,6 +173,20 @@ def stop_gaze_tracking_view(request, user_id, interview_id, question_id):
         "image_data": gaze_tracking_result.encoded_image,
         "feedback": feedback
     }, status=200)
+
+def upload_video_to_gcs(file_obj, bucket_name, destination_blob_name):
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(destination_blob_name)
+
+    # 파일 업로드
+    blob.upload_from_file(file_obj)
+
+    # 파일 콘텐츠 유형 설정
+    blob.content_type = 'video/webm'
+    blob.patch()
+
+    return blob.public_url
 
 class VideoUploadView(APIView):
     permission_classes = [IsAuthenticated]
@@ -185,7 +199,16 @@ class VideoUploadView(APIView):
             user_id = request.data.get('user_id')
             interview_id = request.data.get('interviewId')
             question_id = request.data.get('question_id')
-            video_url = video.file.url
+
+            # GCS에 파일 업로드
+            file_obj = video.file
+            bucket_name = settings.GCS_BUCKET_NAME
+            destination_blob_name = f"videos/{user_id}/{interview_id}/{question_id}/input.webm"
+            try:
+                video_url = upload_video_to_gcs(file_obj, bucket_name, destination_blob_name)
+            except Exception as e:
+                logger.error(f"Error uploading video to GCS: {str(e)}")
+                return JsonResponse({"message": f"Error uploading video: {str(e)}"}, status=500)
 
             key = f"{user_id}_{interview_id}_{question_id}"
             gaze_sessions[key] = GazeTrackingSession()
