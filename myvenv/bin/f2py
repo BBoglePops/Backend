@@ -1,4 +1,4 @@
-#!/Users/seojinlee/Desktop/덕성/2024-1/졸프/Dddok-Dddok-back/myvenv/bin/python3.12
+#!/Users/seojinlee/Desktop/덕성/2024-1/졸프/Dddok-Dddok-back/myvenv/bin/python
 # -*- coding: utf-8 -*-
 import re
 import sys
