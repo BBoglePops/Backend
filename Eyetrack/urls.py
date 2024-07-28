@@ -3,15 +3,13 @@
 from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import path
-from .views import start_gaze_tracking_view, stop_gaze_tracking_view, VideoUploadView
+from .views import start_gaze_tracking_view, stop_gaze_tracking_view, VideoUploadView, SignedURLView
 
 urlpatterns = [
     path('start/<int:user_id>/<int:interview_id>/<int:question_id>/', start_gaze_tracking_view, name='start_gaze_tracking'),
     path('stop/<int:user_id>/<int:interview_id>/<int:question_id>/', stop_gaze_tracking_view, name='stop-gaze-tracking'),
-
-    # 프론트로부터 받아오는 Video 업로드 url
     path('upload/', VideoUploadView.as_view(), name='file-upload'),
+    path('generate-signed-url/', SignedURLView.as_view(), name='generate-signed-url'),
 ]
-
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

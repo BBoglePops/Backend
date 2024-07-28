@@ -15,13 +15,41 @@ from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework import status
-from .serializers import VideoSerializer
+from .serializers import VideoSerializer, SignedURLSerializer, GazeStatusSerializer
 from django.conf import settings
 from google.cloud import storage
+from google.cloud.storage.blob import Blob
+import datetime
+
 
 logger = logging.getLogger(__name__)
 permission_classes = [IsAuthenticated]
 gaze_sessions = {}
+
+
+# GCS 스토리지 Signed Url 생성
+def generate_signed_url(bucket_name, blob_name, expiration=3600):
+    """Generate a signed URL for the given bucket and blob that expires after a certain time."""
+    client = storage.Client()
+    bucket = client.get_bucket(bucket_name)
+    blob = Blob(blob_name, bucket)
+    url = blob.generate_signed_url(expiration=datetime.timedelta(seconds=expiration), method='PUT')
+    return url
+
+class SignedURLView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request, *args, **kwargs):
+        serializer = SignedURLSerializer(data=request.data)
+        if serializer.is_valid():
+            bucket_name = settings.GS_BUCKET_NAME
+            blob_name = f"videos/{serializer.validated_data['user_id']}/{serializer.validated_data['interview_id']}/{serializer.validated_data['question_id']}/input.webm"
+            signed_url = generate_signed_url(bucket_name, blob_name)
+            return JsonResponse({"signed_url": signed_url}, status=200)
+        else:
+            return JsonResponse(serializer.errors, status=400)
+
 
 def download_video_from_gcs(video_url, local_path):
     try:
