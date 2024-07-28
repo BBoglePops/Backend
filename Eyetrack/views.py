@@ -20,6 +20,7 @@ from django.conf import settings
 from google.cloud import storage
 from google.cloud.storage.blob import Blob
 import datetime
+from rest_framework.parsers import JSONParser
 
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ def generate_signed_url(bucket_name, blob_name, expiration=3600):
 
 class SignedURLView(APIView):
     permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def post(self, request, *args, **kwargs):
         serializer = SignedURLSerializer(data=request.data)
