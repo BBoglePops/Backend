@@ -37,15 +37,20 @@ def generate_signed_url(bucket_name, blob_name, expiration=3600):
     url = blob.generate_signed_url(expiration=datetime.timedelta(seconds=expiration), method='PUT')
     return url
 
+# Eyetrack/views.py 수정
 class SignedURLView(APIView):
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
-    def post(self, request, user_id, interview_id, question_id, *args, **kwargs):
-        # URL 경로에서 user_id, interview_id, question_id를 받아옴
-        bucket_name = settings.GS_BUCKET_NAME
-        blob_name = f"videos/{user_id}/{interview_id}/{question_id}/input.webm"
-        signed_url = generate_signed_url(bucket_name, blob_name)
-        return JsonResponse({"signed_url": signed_url}, status=200)
+    def post(self, request, user_id, interview_id, *args, **kwargs):
+        serializer = SignedURLSerializer(data=request.data)
+        if serializer.is_valid():
+            bucket_name = settings.GS_BUCKET_NAME
+            blob_name = f"videos/{user_id}/{interview_id}/input.webm"  # question_id 제거
+            signed_url = generate_signed_url(bucket_name, blob_name)
+            return JsonResponse({"signed_url": signed_url}, status=200)
+        else:
+            return JsonResponse(serializer.errors, status=400)
 
 def download_video_from_gcs(video_url, local_path):
     try:
