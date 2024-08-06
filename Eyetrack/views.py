@@ -29,7 +29,7 @@ gaze_sessions = {}
 
 
 # GCS 스토리지 Signed Url 생성
-def generate_signed_url(bucket_name, blob_name, expiration=3600, content_type='video/webm'):
+def generate_signed_url(bucket_name, blob_name, expiration=3600):
     """주어진 버킷과 Blob에 대한 signed URL을 생성하며, 특정 시간 후에 만료됩니다."""
     # Google Cloud Storage 클라이언트 초기화
     client = storage.Client()
@@ -41,7 +41,7 @@ def generate_signed_url(bucket_name, blob_name, expiration=3600, content_type='v
     url = blob.generate_signed_url(
         expiration=datetime.timedelta(seconds=expiration),
         method='PUT',
-        content_type=content_type
+        
     )
     return url
 
