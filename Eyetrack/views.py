@@ -62,6 +62,9 @@ def generate_signed_url(bucket_name, blob_name, expiration=86400):
         raise
 
 def start_gaze_tracking_view(request, user_id, interview_id):
+    """
+    Start gaze tracking for a specific session.
+    """
     key = f"{user_id}_{interview_id}"
     if key not in gaze_sessions:
         logger.warning(f"Session not found for key: {key}")
@@ -110,6 +113,9 @@ def start_gaze_tracking_view(request, user_id, interview_id):
     return JsonResponse({"message": "Gaze tracking started"}, status=200)
 
 def stop_gaze_tracking_view(request, user_id, interview_id):
+    """
+    Stop gaze tracking for a specific session and return the result.
+    """
     key = f"{user_id}_{interview_id}"
     if key not in gaze_sessions:
         logger.warning(f"Session not found for key: {key}")
@@ -159,6 +165,9 @@ def stop_gaze_tracking_view(request, user_id, interview_id):
         return JsonResponse({"message": f"Error stopping gaze tracking: {str(e)}"}, status=500)
 
 def get_feedback(section_counts):
+    """
+    Generate feedback based on section counts.
+    """
     max_section = max(section_counts, key=section_counts.get)
     feedback = "Interviewer와의 눈맞춤이 잘 되고 있습니다."
     if max_section == 'A':
@@ -168,6 +177,9 @@ def get_feedback(section_counts):
     return feedback
 
 def apply_gradient(center, radius, color, image, text=None):
+    """
+    Apply a gradient circle to the image at the specified center.
+    """
     overlay = image.copy()
     cv2.circle(overlay, center, radius, color, -1)
     cv2.addWeighted(overlay, 0.5, image, 0.5, 0, image)
@@ -182,6 +194,9 @@ def apply_gradient(center, radius, color, image, text=None):
         cv2.putText(image, text, (text_x, text_y), font, font_scale, font_color, thickness)
 
 def assign_colors_and_numbers(section_counts):
+    """
+    Assign colors and numbers to sections based on their counts.
+    """
     colors = [
         (38, 38, 255), (59, 94, 255), (55, 134, 255),
         (51, 173, 255), (26, 210, 255), (0, 255, 255)
@@ -195,6 +210,9 @@ def assign_colors_and_numbers(section_counts):
     return color_map, number_map
 
 def draw_heatmap(image, section_counts):
+    """
+    Draw a heatmap on the image based on section counts.
+    """
     height, width, _ = image.shape
     section_centers = {
         "A": (int(width / 6), int(height / 2)),
@@ -209,6 +227,7 @@ def draw_heatmap(image, section_counts):
             number = number_map[section]
             radius = int(width / 12)
             apply_gradient(center, radius, color, image, number)
+
 
 
 
