@@ -81,18 +81,20 @@ def download_video_from_gcs(video_url, local_path):
         logger.error(f"Error downloading video from GCS: {str(e)}")
         raise
 
-#시선 추적 시작
+# 시선 추적 시작
 def start_gaze_tracking_view(request, user_id, interview_id):
     key = f"{user_id}_{interview_id}"
+    
+    # 세션이 존재하지 않을 경우 에러 반환
     if key not in gaze_sessions:
         return JsonResponse({"message": "Session not found", "log_message": f"Session not found for key: {key}"}, status=404)
     
-    # Access the session info from the dictionary correctly
+    # 세션 정보를 딕셔너리에서 가져옴
     session_info = gaze_sessions.get(key)
     if not session_info:
         return JsonResponse({"message": "Session data is missing"}, status=404)
 
-    # Extract the video URL and GazeTrackingSession object
+    # 비디오 URL 및 GazeTrackingSession 객체를 가져옴
     video_url = session_info.get('video_url')
     if not video_url:
         return JsonResponse({"message": "Video URL not found"}, status=404)
@@ -101,13 +103,15 @@ def start_gaze_tracking_view(request, user_id, interview_id):
     local_video_path = os.path.join(settings.MEDIA_ROOT, f"{user_id}_{interview_id}.webm")
 
     try:
+        # Google Cloud Storage에서 동영상을 다운로드
         download_video_from_gcs(video_url, local_video_path)
+        # 시선 추적 시작
         gaze_session.start_eye_tracking(local_video_path)
     except Exception as e:
         return JsonResponse({"message": f"Error processing video: {str(e)}"}, status=500)
     
     try:
-        # Optional: Display the video frames using OpenCV
+        # 동영상 파일을 OpenCV로 열어서 표시 (선택적 기능)
         cap = cv2.VideoCapture(local_video_path)
         if not cap.isOpened():
             return JsonResponse({"message": "Cannot open video file"}, status=500)
@@ -125,7 +129,6 @@ def start_gaze_tracking_view(request, user_id, interview_id):
         return JsonResponse({"message": f"Error displaying video: {str(e)}"}, status=500)
 
     return JsonResponse({"message": "Gaze tracking started"}, status=200)
-
 
 def apply_gradient(center, radius, color, image, text=None):
     overlay = image.copy()
