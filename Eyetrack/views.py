@@ -1,7 +1,7 @@
 from django.shortcuts import render
 from django.http import JsonResponse
 from .main import GazeTrackingSession
-from .models import GazeTrackingResult
+from .models import GazeTrackingResult, Video
 import cv2
 import pandas as pd
 import base64
@@ -26,8 +26,8 @@ permission_classes = [IsAuthenticated]
 gaze_sessions = {}
 
 # GCS에서 서명된 URL 생성
-def generate_signed_url(bucket_name, blob_name, expiration=3600):
-    client = storage.Client()
+def generate_signed_url(bucket_name, blob_name, expiration=86400): # 만료기간 1일
+    client = storage.Client() 
     bucket = client.get_bucket(bucket_name)
     blob = Blob(blob_name, bucket)
     url = blob.generate_signed_url(
@@ -71,7 +71,7 @@ def start_gaze_tracking_view(request, user_id, interview_id):
     key = f"{user_id}_{interview_id}"
     if key not in gaze_sessions:
         return JsonResponse({"message": "Session not found", "status": "error"}, status=404)
-    
+
     gaze_session = gaze_sessions[key]
     video_url = gaze_session.video_url
     if not video_url:
@@ -80,6 +80,9 @@ def start_gaze_tracking_view(request, user_id, interview_id):
     local_video_path = os.path.join(settings.MEDIA_ROOT, f"{user_id}_{interview_id}.webm")
     try:
         download_video_from_gcs(video_url, local_video_path)
+        # 데이터베이스에 비디오 파일 정보 저장
+        video_instance = Video(user_id=user_id, interview_id=interview_id, video_file=local_video_path)
+        video_instance.save()
         gaze_session.start_eye_tracking(local_video_path)
     except Exception as e:
         return JsonResponse({"message": str(e), "status": "error"}, status=500)
