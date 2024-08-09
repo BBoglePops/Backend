@@ -130,6 +130,17 @@ def start_gaze_tracking_view(request, user_id, interview_id):
 
     return JsonResponse({"message": "Gaze tracking started"}, status=200)
 
+#   추가
+from django.http import JsonResponse
+
+def get_session_status(request, user_id, interview_id):
+    key = f"{user_id}_{interview_id}"
+    if key in gaze_sessions:
+        return JsonResponse({"message": "Session found", "session_key": key, "session_data": str(gaze_sessions[key])})
+    else:
+        return JsonResponse({"message": "Session not found", "session_key": key}, status=404)
+
+
 def apply_gradient(center, radius, color, image, text=None):
     overlay = image.copy()
     cv2.circle(overlay, center, radius, color, -1)
