@@ -64,51 +64,77 @@ class SignedURLView(APIView):
 
 
 
-def generate_video_url(user_id, interview_id):
-    """Generate a public URL for a video based on user ID and interview ID."""
-    return f'{settings.MEDIA_URL}{user_id}/{interview_id}/input.webm'
+# def generate_video_url(user_id, interview_id):
+#     """Generate a public URL for a video based on user ID and interview ID."""
+#     return f'{settings.MEDIA_URL}{user_id}/{interview_id}/input.webm'
 
-def download_video_from_public_url(video_url, local_path):
-    """Download a video from a public URL."""
-    try:
-        response = requests.get(video_url, stream=True)
-        if response.status_code == 200:
-            os.makedirs(os.path.dirname(local_path), exist_ok=True)  # Ensure directory exists
-            with open(local_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            logger.info(f"File downloaded successfully to {local_path}")
-        else:
-            error_msg = f"Failed to download file, status code: {response.status_code}"
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-    except Exception as e:
-        logger.error(f"Error downloading video from public URL: {e}")
-        raise
+# def download_video_from_public_url(video_url, local_path):
+#     """Download a video from a public URL."""
+#     try:
+#         response = requests.get(video_url, stream=True)
+#         if response.status_code == 200:
+#             os.makedirs(os.path.dirname(local_path), exist_ok=True)  # Ensure directory exists
+#             with open(local_path, 'wb') as f:
+#                 for chunk in response.iter_content(chunk_size=8192):
+#                     f.write(chunk)
+#             logger.info(f"File downloaded successfully to {local_path}")
+#         else:
+#             error_msg = f"Failed to download file, status code: {response.status_code}"
+#             logger.error(error_msg)
+#             raise ValueError(error_msg)
+#     except Exception as e:
+#         logger.error(f"Error downloading video from public URL: {e}")
+#         raise
+
+class VideoUploadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, user_id, interview_id):
+        file_url = f'{settings.MEDIA_URL}{user_id}/{interview_id}/input.webm'  # GCS에서의 파일 위치
+        video = Video.objects.create(user_id=user_id, interview_id=interview_id, file=file_url)
+        return JsonResponse({'message': 'Video saved successfully', 'video_id': video.id}, status=201)
+
 
 def start_gaze_tracking_view(request, user_id, interview_id):
-    key = f"{user_id}_{interview_id}"
-    if key not in gaze_sessions:
-        return JsonResponse({"message": "Session not found", "log_message": f"Session not found for key: {key}"}, status=404)
-
-    video_url = generate_video_url(user_id, interview_id)
-    local_video_path = os.path.join(settings.MEDIA_ROOT, f'{user_id}/{interview_id}/input.webm')
-    
     try:
-        download_video_from_public_url(video_url, local_video_path)
-    except Exception as e:
-        return JsonResponse({"message": f"Error downloading video: {str(e)}"}, status=500)
-    
-    if key not in gaze_sessions:
-        gaze_sessions[key] = GazeTrackingSession(video_url=video_url, status="initialized")
+        video = Video.objects.get(user_id=user_id, interview_id=interview_id)
+    except Video.DoesNotExist:
+        return JsonResponse({"message": "Video not found"}, status=404)
+
+    local_video_path = video.file  # GCS URL을 직접 사용
+    gaze_session_key = f"{user_id}_{interview_id}"
+    gaze_sessions[gaze_session_key] = GazeTrackingSession(video_url=local_video_path, status="initialized")
 
     try:
-        gaze_session = gaze_sessions[key]
+        gaze_session = gaze_sessions[gaze_session_key]
         gaze_session.start_eye_tracking(local_video_path)
+        return JsonResponse({"message": "Gaze tracking started"}, status=200)
     except Exception as e:
-        return JsonResponse({"message": f"Error processing video: {str(e)}"}, status=500)
+        return JsonResponse({"message": str(e)}, status=500)
+
+# def start_gaze_tracking_view(request, user_id, interview_id):
+#     key = f"{user_id}_{interview_id}"
+#     if key not in gaze_sessions:
+#         return JsonResponse({"message": "Session not found", "log_message": f"Session not found for key: {key}"}, status=404)
+
+#     video_url = generate_video_url(user_id, interview_id)
+#     local_video_path = os.path.join(settings.MEDIA_ROOT, f'{user_id}/{interview_id}/input.webm')
     
-    return JsonResponse({"message": "Gaze tracking started"}, status=200)
+#     try:
+#         download_video_from_public_url(video_url, local_video_path)
+#     except Exception as e:
+#         return JsonResponse({"message": f"Error downloading video: {str(e)}"}, status=500)
+    
+#     if key not in gaze_sessions:
+#         gaze_sessions[key] = GazeTrackingSession(video_url=video_url, status="initialized")
+
+#     try:
+#         gaze_session = gaze_sessions[key]
+#         gaze_session.start_eye_tracking(local_video_path)
+#     except Exception as e:
+#         return JsonResponse({"message": f"Error processing video: {str(e)}"}, status=500)
+    
+#     return JsonResponse({"message": "Gaze tracking started"}, status=200)
 
 
 def apply_gradient(center, radius, color, image, text=None):
