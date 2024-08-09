@@ -9,7 +9,7 @@ from django.conf import settings
 import os
 
 class GazeTrackingSession:
-    def __init__(self):
+    def __init__(self, video_url=None, status="initialized"):
         self.sections = {
             "A": 0,
             "B": 0,
@@ -21,7 +21,8 @@ class GazeTrackingSession:
         self.section = "None"
         self.thread = None
         self.running = False
-        self.video_path = None  # video_path 속성을 초기화
+        self.video_url = video_url  # video_url 속성을 초기화
+        self.status = status
 
     def Section(self, where):
         if where in self.sections:
