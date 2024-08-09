@@ -46,17 +46,21 @@ class SignedURLView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
-    # 서명된 URL 생성 시 세션 초기화
     def post(self, request, user_id, interview_id, *args, **kwargs):
         serializer = SignedURLSerializer(data=request.data)
         if serializer.is_valid():
             bucket_name = settings.GS_BUCKET_NAME
             blob_name = f"videos/{user_id}/{interview_id}/input.webm"
-            signed_url = generate_signed_url(bucket_name, blob_name)
-            key = f"{user_id}_{interview_id}"
-            if key not in gaze_sessions:
-                gaze_sessions[key] = GazeTrackingSession(video_url=signed_url, status="initialized")
-            return JsonResponse({"signed_url": signed_url}, status=200)
+            try:
+                signed_url = generate_signed_url(bucket_name, blob_name)
+                key = f"{user_id}_{interview_id}"
+                if key not in gaze_sessions:
+                    # GazeTrackingSession이 video_url을 처리할 수 있도록 초기화
+                    gaze_sessions[key] = GazeTrackingSession(video_url=signed_url)
+                return JsonResponse({"signed_url": signed_url}, status=200)
+            except Exception as e:
+                logger.error(f"서명된 URL 생성 중 오류 발생: {str(e)}")
+                return JsonResponse({"error": str(e)}, status=500)
         else:
             return JsonResponse(serializer.errors, status=400)
             
