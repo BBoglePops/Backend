@@ -30,7 +30,7 @@ if not OPENAI_API_KEY:
     raise ImproperlyConfigured("Set the OPENAI_API_KEY environment variable")
 
 # Quick-start development settings - unsuitable for production
-DEBUG = False
+DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
