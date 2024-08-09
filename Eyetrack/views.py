@@ -50,7 +50,7 @@ class SignedURLView(APIView):
         serializer = SignedURLSerializer(data=request.data)
         if serializer.is_valid():
             bucket_name = settings.GS_BUCKET_NAME
-            blob_name = f"videos/{user_id}/{interview_id}/input.webm"
+            blob_name = f"videos/{user_id}/{interview_id}/videos_{user_id}_{interview_id}_input.webm"
             try:
                 signed_url = generate_signed_url(bucket_name, blob_name)
                 key = f"{user_id}_{interview_id}"
