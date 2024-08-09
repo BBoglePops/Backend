@@ -43,28 +43,28 @@ def generate_signed_url(bucket_name, blob_name, expiration=86400):
 
 # 서명된 URL 생성을 위한 API 뷰
 class SignedURLView(APIView):
-    permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser, JSONParser]
-
     def post(self, request, user_id, interview_id, *args, **kwargs):
         serializer = SignedURLSerializer(data=request.data)
         if serializer.is_valid():
             bucket_name = settings.GS_BUCKET_NAME
-            blob_name = f"videos/{user_id}/{interview_id}/videos_{user_id}_{interview_id}_input.webm"
+            blob_name = f"videos/{user_id}/{interview_id}/input.webm"
             try:
                 signed_url = generate_signed_url(bucket_name, blob_name)
                 key = f"{user_id}_{interview_id}"
                 if key not in gaze_sessions:
+                    # GazeTrackingSession 초기화 및 세션 정보 저장
                     gaze_sessions[key] = {
                         "session": GazeTrackingSession(),
                         "video_url": signed_url
                     }
+                    logger.info(f"Session created for key: {key}")  # 로그 추가
                 return JsonResponse({"signed_url": signed_url}, status=200)
             except Exception as e:
                 logger.error(f"서명된 URL 생성 중 오류 발생: {str(e)}")
                 return JsonResponse({"error": str(e)}, status=500)
         else:
             return JsonResponse(serializer.errors, status=400)
+
             
 # GCS에서 비디오 다운로드
 def download_video_from_gcs(video_url, local_path):
