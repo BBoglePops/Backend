@@ -84,7 +84,6 @@ def start_gaze_tracking_view(request, user_id, interview_id):
     local_video_path = os.path.join(settings.MEDIA_ROOT, f"{user_id}_{interview_id}.webm")
     try:
         download_video_from_gcs(video_url, local_video_path)
-        # 데이터베이스에 비디오 파일 정보 저장
         video_instance = Video(user_id=user_id, interview_id=interview_id, video_file=local_video_path)
         video_instance.save()
         gaze_session.start_eye_tracking(local_video_path)
@@ -92,6 +91,7 @@ def start_gaze_tracking_view(request, user_id, interview_id):
         return JsonResponse({"message": str(e), "status": "error"}, status=500)
 
     return JsonResponse({"message": "Gaze tracking started", "status": "success"}, status=200)
+
 
 def apply_gradient(center, radius, color, image, text=None):
     overlay = image.copy()
@@ -170,10 +170,11 @@ def draw_heatmap(image, section_counts):
 #         "status": "success"
 #     }, status=200)
 
-def stop_gaze_tracking_view(request, user_id, interview_id, question_id):
-    key = f"{user_id}_{interview_id}_{question_id}"
+def stop_gaze_tracking_view(request, user_id, interview_id):
+    key = f"{user_id}_{interview_id}"
     if key not in gaze_sessions:
         return JsonResponse({"message": "Session not found", "status": "error"}, status=404)
+    
     gaze_session = gaze_sessions[key]
     csv_filename = gaze_session.stop_eye_tracking()
     section_data = pd.read_csv(csv_filename)
@@ -182,6 +183,7 @@ def stop_gaze_tracking_view(request, user_id, interview_id, question_id):
     original_image = cv2.imread(image_path)
     if original_image is None:
         return JsonResponse({"message": "Image not found", "status": "error"}, status=404)
+    
     heatmap_image = original_image.copy()
     draw_heatmap(heatmap_image, section_counts)
     _, buffer = cv2.imencode('.png', heatmap_image)
@@ -193,7 +195,7 @@ def stop_gaze_tracking_view(request, user_id, interview_id, question_id):
         encoded_image=encoded_image_string,
         feedback=feedback
     )
-    local_video_path = os.path.join(settings.MEDIA_ROOT, f"{user_id}_{interview_id}_{question_id}.webm")
+    local_video_path = os.path.join(settings.MEDIA_ROOT, f"{user_id}_{interview_id}.webm")
     if os.path.exists(local_video_path):
         os.remove(local_video_path)
     del gaze_sessions[key]
@@ -205,13 +207,14 @@ def stop_gaze_tracking_view(request, user_id, interview_id, question_id):
     }, status=200)
 
 
-# def upload_video_to_gcs(file_obj, bucket_name, destination_blob_name):
-#     client = storage.Client()
 
-#     bucket = client.bucket(bucket_name)
-#     blob = bucket.blob(destination_blob_name)
-#     blob.upload_from_file(file_obj, content_type='video/webm')
-#     return blob.public_url
+def upload_video_to_gcs(file_obj, bucket_name, destination_blob_name):
+    client = storage.Client()
+
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(destination_blob_name)
+    blob.upload_from_file(file_obj, content_type='video/webm')
+    return blob.public_url
 
 # class VideoUploadView(APIView):
 #     permission_classes = [IsAuthenticated]
