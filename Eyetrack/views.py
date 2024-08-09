@@ -20,21 +20,26 @@ from django.conf import settings
 from google.cloud import storage
 from google.cloud.storage.blob import Blob
 import datetime
+from google.cloud.exceptions import GoogleCloudError
 
 logger = logging.getLogger(__name__)
 permission_classes = [IsAuthenticated]
 gaze_sessions = {}
 
 # GCS에서 서명된 URL 생성
-def generate_signed_url(bucket_name, blob_name, expiration=86400): # 만료기간 1일
-    client = storage.Client() 
-    bucket = client.get_bucket(bucket_name)
-    blob = Blob(blob_name, bucket)
-    url = blob.generate_signed_url(
-        expiration=datetime.timedelta(seconds=expiration),
-        method='PUT'
-    )
-    return url
+def generate_signed_url(bucket_name, blob_name, expiration=86400):
+    client = storage.Client()
+    try:
+        bucket = client.get_bucket(bucket_name)
+        blob = bucket.blob(blob_name)
+        url = blob.generate_signed_url(
+            expiration=datetime.timedelta(seconds=expiration),
+            method='PUT'
+        )
+        return url
+    except GoogleCloudError as e:
+        logger.error(f"서명된 URL 생성 실패: {e}")
+        raise
 
 # 서명된 URL 생성을 위한 API 뷰
 class SignedURLView(APIView):
@@ -208,13 +213,12 @@ def stop_gaze_tracking_view(request, user_id, interview_id):
 
 
 
-def upload_video_to_gcs(file_obj, bucket_name, destination_blob_name):
-    client = storage.Client()
-
-    bucket = client.bucket(bucket_name)
-    blob = bucket.blob(destination_blob_name)
-    blob.upload_from_file(file_obj, content_type='video/webm')
-    return blob.public_url
+# def upload_video_to_gcs(file_obj, bucket_name, destination_blob_name):
+#     client = storage.Client()
+#     bucket = client.bucket(bucket_name)
+#     blob = bucket.blob(destination_blob_name)
+#     blob.upload_from_file(file_obj, content_type='video/webm')
+#     return blob.public_url
 
 # class VideoUploadView(APIView):
 #     permission_classes = [IsAuthenticated]
