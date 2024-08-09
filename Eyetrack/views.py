@@ -64,6 +64,10 @@ class SignedURLView(APIView):
 
 
 
+def generate_video_url(user_id, interview_id):
+    """Generate a public URL for a video based on user ID and interview ID."""
+    return f'{settings.MEDIA_URL}{user_id}/{interview_id}/input.webm'
+
 def download_video_from_public_url(video_url, local_path):
     """Download a video from a public URL."""
     try:
@@ -86,25 +90,24 @@ def start_gaze_tracking_view(request, user_id, interview_id):
     if key not in gaze_sessions:
         return JsonResponse({"message": "Session not found", "log_message": f"Session not found for key: {key}"}, status=404)
 
-    gaze_session = gaze_sessions[key]
-    video_url = gaze_session.video_url
+    video_url = generate_video_url(user_id, interview_id)
+    local_video_path = os.path.join(settings.MEDIA_ROOT, f'{user_id}_{interview_id}_input.webm')
     
-    if not video_url:
-        return JsonResponse({"message": "Video URL not found"}, status=404)
-    
-    local_video_path = os.path.join(settings.MEDIA_ROOT, 'input.webm')
     try:
         download_video_from_public_url(video_url, local_video_path)
     except Exception as e:
         return JsonResponse({"message": f"Error downloading video: {str(e)}"}, status=500)
     
+    if key not in gaze_sessions:
+        gaze_sessions[key] = GazeTrackingSession(video_url=video_url, status="initialized")
+
     try:
+        gaze_session = gaze_sessions[key]
         gaze_session.start_eye_tracking(local_video_path)
     except Exception as e:
         return JsonResponse({"message": f"Error processing video: {str(e)}"}, status=500)
     
     return JsonResponse({"message": "Gaze tracking started"}, status=200)
-
 
 
 
