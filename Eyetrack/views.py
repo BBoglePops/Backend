@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 permission_classes = [IsAuthenticated]
 gaze_sessions = {}
 
-# GCS 스토리지 Signed Url 생성
+# GCS에서 서명된 URL 생성
 def generate_signed_url(bucket_name, blob_name, expiration=3600):
     client = storage.Client()
     bucket = client.get_bucket(bucket_name)
@@ -36,6 +36,7 @@ def generate_signed_url(bucket_name, blob_name, expiration=3600):
     )
     return url
 
+# 서명된 URL 생성을 위한 API 뷰
 class SignedURLView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
@@ -50,12 +51,11 @@ class SignedURLView(APIView):
         else:
             return JsonResponse(serializer.errors, status=400)
 
+# GCS에서 비디오 다운로드
 def download_video_from_gcs(video_url, local_path):
     try:
         if video_url.startswith('https://storage.googleapis.com/'):
             video_url = video_url.replace('https://storage.googleapis.com/', 'gs://')
-        elif not video_url.startswith('gs://'):
-            raise ValueError("Invalid video URL format")
         gs_prefix = 'gs://'
         bucket_name, blob_name = video_url[len(gs_prefix):].split('/', 1)
         client = storage.Client()
@@ -66,20 +66,24 @@ def download_video_from_gcs(video_url, local_path):
         logger.error(f"Error downloading video from GCS: {str(e)}")
         raise
 
-def start_gaze_tracking_view(request, user_id, interview_id, question_id):
-    key = f"{user_id}_{interview_id}_{question_id}"
+# 시선 추적 시작 뷰
+def start_gaze_tracking_view(request, user_id, interview_id):
+    key = f"{user_id}_{interview_id}"
     if key not in gaze_sessions:
         return JsonResponse({"message": "Session not found", "status": "error"}, status=404)
+    
     gaze_session = gaze_sessions[key]
     video_url = gaze_session.video_url
     if not video_url:
         return JsonResponse({"message": "Video URL not found", "status": "error"}, status=404)
-    local_video_path = os.path.join(settings.MEDIA_ROOT, f"{user_id}_{interview_id}_{question_id}.webm")
+
+    local_video_path = os.path.join(settings.MEDIA_ROOT, f"{user_id}_{interview_id}.webm")
     try:
         download_video_from_gcs(video_url, local_video_path)
         gaze_session.start_eye_tracking(local_video_path)
     except Exception as e:
         return JsonResponse({"message": str(e), "status": "error"}, status=500)
+
     return JsonResponse({"message": "Gaze tracking started", "status": "success"}, status=200)
 
 def apply_gradient(center, radius, color, image, text=None):
