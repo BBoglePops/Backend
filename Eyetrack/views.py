@@ -176,24 +176,25 @@ def upload_video_to_gcs(file_obj, bucket_name, destination_blob_name):
 class VideoUploadView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser)
+
     def post(self, request, *args, **kwargs):
         file_serializer = VideoSerializer(data=request.data)
         if file_serializer.is_valid():
             video = file_serializer.save()
             user_id = request.data.get('user_id')
             interview_id = request.data.get('interviewId')
-            question_id = request.data.get('question_id')
             file_obj = video.file.open('rb')
             bucket_name = settings.GS_BUCKET_NAME
-            destination_blob_name = f"videos/{user_id}/{interview_id}/{question_id}/input.webm"
+            destination_blob_name = f"videos/{user_id}/{interview_id}/input.webm"
             try:
                 video_url = upload_video_to_gcs(file_obj, bucket_name, destination_blob_name)
                 file_obj.close()
             except Exception as e:
                 logger.error(f"Error uploading video to GS: {str(e)}")
                 return JsonResponse({"message": f"Error uploading video: {str(e)}", "status": "error"}, status=500)
-            key = f"{user_id}_{interview_id}_{question_id}"
-            gaze_sessions[key] = GazeTrackingSession()
+            key = f"{user_id}_{interview_id}"
+            if key not in gaze_sessions:
+                gaze_sessions[key] = GazeTrackingSession()
             gaze_sessions[key].video_url = video_url
             logger.info(f"Session added for key: {key}")
             return JsonResponse({"message": "Video uploaded successfully", "status": "success", "log_message": f"Session added for key: {key}"}, status=201)
