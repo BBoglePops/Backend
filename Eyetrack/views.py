@@ -69,17 +69,21 @@ class SignedURLView(APIView):
 # GCS에서 비디오 다운로드
 def download_video_from_gcs(video_url, local_path):
     try:
+        logger.info(f"Starting download from GCS: {video_url} to {local_path}")  # 로그 추가
         if video_url.startswith('https://storage.googleapis.com/'):
             video_url = video_url.replace('https://storage.googleapis.com/', 'gs://')
         gs_prefix = 'gs://'
         bucket_name, blob_name = video_url[len(gs_prefix):].split('/', 1)
+        logger.info(f"Bucket: {bucket_name}, Blob: {blob_name}")  # 로그 추가
         client = storage.Client()
         bucket = client.bucket(bucket_name)
         blob = bucket.blob(blob_name)
         blob.download_to_filename(local_path)
+        logger.info("Download completed")  # 로그 추가
     except Exception as e:
         logger.error(f"Error downloading video from GCS: {str(e)}")
         raise
+
 
 # 시선 추적 시작
 def start_gaze_tracking_view(request, user_id, interview_id):
