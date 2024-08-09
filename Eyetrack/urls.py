@@ -8,7 +8,7 @@ from .views import start_gaze_tracking_view, stop_gaze_tracking_view, VideoUploa
 urlpatterns = [
     path('start/<int:user_id>/<int:interview_id>/', start_gaze_tracking_view, name='start_gaze_tracking'),
     path('stop/<int:user_id>/<int:interview_id>/', stop_gaze_tracking_view, name='stop-gaze-tracking'),
-    path('upload/', VideoUploadView.as_view(), name='file-upload'),
+    # path('upload/', VideoUploadView.as_view(), name='file-upload'),
    path('generate-signed-url/<int:user_id>/<int:interview_id>/', SignedURLView.as_view(), name='generate-signed-url'),
 ]
 if settings.DEBUG:
