@@ -20,6 +20,7 @@ from django.conf import settings
 from google.cloud import storage
 from google.cloud.exceptions import GoogleCloudError
 import datetime
+import requests
 
 logger = logging.getLogger(__name__)
 permission_classes = [IsAuthenticated]
@@ -63,61 +64,48 @@ class SignedURLView(APIView):
 
 
 
-            
-# GCS에서 비디오 다운로드
-def download_video_from_gcs(video_url, local_path):
+def download_video_from_public_url(video_url, local_path):
+    """Download a video from a public URL."""
     try:
-        if video_url.startswith('https://storage.googleapis.com/'):
-            video_url = video_url.replace('https://storage.googleapis.com/', 'gs://')
-        gs_prefix = 'gs://'
-        bucket_name, blob_name = video_url[len(gs_prefix):].split('/', 1)
-        client = storage.Client()
-        bucket = client.bucket(bucket_name)
-        blob = bucket.blob(blob_name)
-        blob.download_to_filename(local_path)
-    except ValueError as e:
-        raise ValueError(f"비디오 URL 처리 오류: {e}")
-    except GoogleCloudError as e:
-        raise ValueError(f"GCS에서 비디오 다운로드 중 오류 발생: {e}")
-    except IOError as e:
-        raise ValueError(f"로컬 파일 저장 중 IO 오류 발생: {e}")
+        response = requests.get(video_url, stream=True)
+        if response.status_code == 200:
+            with open(local_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            logger.info(f"File downloaded successfully to {local_path}")
+        else:
+            error_msg = f"Failed to download file, status code: {response.status_code}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
     except Exception as e:
-        raise ValueError(f"비디오 다운로드 중 예기치 않은 오류 발생: {e}")
-
-
+        logger.error(f"Error downloading video from public URL: {e}")
+        raise
 
 def start_gaze_tracking_view(request, user_id, interview_id):
     key = f"{user_id}_{interview_id}"
-    
-    # 세션 존재 여부 확인
     if key not in gaze_sessions:
-        return JsonResponse(
-            {"message": "Session not found", "log_message": f"Session not found for key: {key}"},
-            status=404
-        )
-    
+        return JsonResponse({"message": "Session not found", "log_message": f"Session not found for key: {key}"}, status=404)
+
     gaze_session = gaze_sessions[key]
     video_url = gaze_session.video_url
     
-    # 비디오 URL 존재 여부 확인
     if not video_url:
         return JsonResponse({"message": "Video URL not found"}, status=404)
     
     local_video_path = os.path.join(settings.MEDIA_ROOT, 'input.webm')
-
     try:
-        # GCS에서 비디오 다운로드
-        download_video_from_gcs(video_url, local_video_path)
+        download_video_from_public_url(video_url, local_video_path)
     except Exception as e:
         return JsonResponse({"message": f"Error downloading video: {str(e)}"}, status=500)
     
     try:
-        # 시선 추적 시작
         gaze_session.start_eye_tracking(local_video_path)
     except Exception as e:
         return JsonResponse({"message": f"Error processing video: {str(e)}"}, status=500)
     
     return JsonResponse({"message": "Gaze tracking started"}, status=200)
+
+
 
 
 def apply_gradient(center, radius, color, image, text=None):
