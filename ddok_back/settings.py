@@ -155,17 +155,25 @@ LOGGING = {
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
-            'level': 'DEBUG',
+            'level': 'ERROR',  # 콘솔에서는 ERROR 이상의 로그만 출력
+        },
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': '/Users/seojinlee/Desktop/덕성/2024-1/졸프/Dddok-Dddok-back/debug.log',
+            'level': 'DEBUG',  # 파일에는 모든 DEBUG 레벨 로그 기록
         },
     },
     'loggers': {
-        '': {
-            'handlers': ['console'],
+        'django': {
+            'handlers': ['console', 'file'],
             'level': 'DEBUG',
-            'propagate': False,
+            'propagate': True,
         },
+        # 다른 loggers 설정도 필요할 경우 추가할 수 있음
     },
 }
+
+
 
 GS_BUCKET_NAME = 'bbogle-bucket'
 DEFAULT_FILE_STORAGE = 'storages.backends.gcloud.GoogleCloudStorage'

@@ -136,6 +136,40 @@ def draw_heatmap(image, section_counts):
             radius = int(width / 12)  # Dynamic radius based on image width
             apply_gradient(center, radius, color, image, number)
 
+# def stop_gaze_tracking_view(request, user_id, interview_id, question_id):
+#     key = f"{user_id}_{interview_id}_{question_id}"
+#     if key not in gaze_sessions:
+#         return JsonResponse({"message": "Session not found", "status": "error"}, status=404)
+#     gaze_session = gaze_sessions[key]
+#     csv_filename = gaze_session.stop_eye_tracking()
+#     section_data = pd.read_csv(csv_filename)
+#     section_counts = dict(zip(section_data["Section"], section_data["Count"]))
+#     image_path = os.path.join(settings.BASE_DIR, "Eyetrack", "0518", "image.png")
+#     original_image = cv2.imread(image_path)
+#     if original_image is None:
+#         return JsonResponse({"message": "Image not found", "status": "error"}, status=404)
+#     heatmap_image = original_image.copy()
+#     draw_heatmap(heatmap_image, section_counts)
+#     _, buffer = cv2.imencode('.png', heatmap_image)
+#     encoded_image_string = base64.b64encode(buffer).decode('utf-8')
+#     feedback = get_feedback(section_counts)
+#     gaze_tracking_result = GazeTrackingResult.objects.create(
+#         user_id=user_id,
+#         interview_id=interview_id,
+#         encoded_image=encoded_image_string,
+#         feedback=feedback
+#     )
+#     local_video_path = os.path.join(settings.MEDIA_ROOT, f"{user_id}_{interview_id}_{question_id}.webm")
+#     if os.path.exists(local_video_path):
+#         os.remove(local_video_path)
+#     del gaze_sessions[key]
+#     return JsonResponse({
+#         "message": "Gaze tracking stopped",
+#         "image_data": gaze_tracking_result.encoded_image,
+#         "feedback": feedback,
+#         "status": "success"
+#     }, status=200)
+
 def stop_gaze_tracking_view(request, user_id, interview_id, question_id):
     key = f"{user_id}_{interview_id}_{question_id}"
     if key not in gaze_sessions:
@@ -170,8 +204,10 @@ def stop_gaze_tracking_view(request, user_id, interview_id, question_id):
         "status": "success"
     }, status=200)
 
+
 # def upload_video_to_gcs(file_obj, bucket_name, destination_blob_name):
 #     client = storage.Client()
+
 #     bucket = client.bucket(bucket_name)
 #     blob = bucket.blob(destination_blob_name)
 #     blob.upload_from_file(file_obj, content_type='video/webm')
