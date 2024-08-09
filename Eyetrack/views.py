@@ -87,11 +87,17 @@ def start_gaze_tracking_view(request, user_id, interview_id):
     if key not in gaze_sessions:
         return JsonResponse({"message": "Session not found", "log_message": f"Session not found for key: {key}"}, status=404)
     
-    gaze_session = gaze_sessions[key]
-    video_url = gaze_session.video_url
+    # Access the session info from the dictionary correctly
+    session_info = gaze_sessions.get(key)
+    if not session_info:
+        return JsonResponse({"message": "Session data is missing"}, status=404)
+
+    # Extract the video URL and GazeTrackingSession object
+    video_url = session_info.get('video_url')
     if not video_url:
         return JsonResponse({"message": "Video URL not found"}, status=404)
     
+    gaze_session = session_info.get('session')
     local_video_path = os.path.join(settings.MEDIA_ROOT, f"{user_id}_{interview_id}.webm")
 
     try:
@@ -101,7 +107,7 @@ def start_gaze_tracking_view(request, user_id, interview_id):
         return JsonResponse({"message": f"Error processing video: {str(e)}"}, status=500)
     
     try:
-        # Display the video frames using OpenCV
+        # Optional: Display the video frames using OpenCV
         cap = cv2.VideoCapture(local_video_path)
         if not cap.isOpened():
             return JsonResponse({"message": "Cannot open video file"}, status=500)
