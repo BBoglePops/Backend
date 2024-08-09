@@ -73,6 +73,7 @@ def download_video_from_public_url(video_url, local_path):
     try:
         response = requests.get(video_url, stream=True)
         if response.status_code == 200:
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)  # Ensure directory exists
             with open(local_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
@@ -91,7 +92,7 @@ def start_gaze_tracking_view(request, user_id, interview_id):
         return JsonResponse({"message": "Session not found", "log_message": f"Session not found for key: {key}"}, status=404)
 
     video_url = generate_video_url(user_id, interview_id)
-    local_video_path = os.path.join(settings.MEDIA_ROOT, f'{user_id}_{interview_id}_input.webm')
+    local_video_path = os.path.join(settings.MEDIA_ROOT, f'{user_id}/{interview_id}/input.webm')
     
     try:
         download_video_from_public_url(video_url, local_video_path)
@@ -108,7 +109,6 @@ def start_gaze_tracking_view(request, user_id, interview_id):
         return JsonResponse({"message": f"Error processing video: {str(e)}"}, status=500)
     
     return JsonResponse({"message": "Gaze tracking started"}, status=200)
-
 
 
 def apply_gradient(center, radius, color, image, text=None):
