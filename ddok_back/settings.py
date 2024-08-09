@@ -30,7 +30,7 @@ if not OPENAI_API_KEY:
     raise ImproperlyConfigured("Set the OPENAI_API_KEY environment variable")
 
 # Quick-start development settings - unsuitable for production
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ['*']
 
@@ -159,19 +159,19 @@ LOGGING = {
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
-            'level': 'ERROR',  # 콘솔에서는 ERROR 이상의 로그만 출력
+            'level': 'WARNING',  # DEBUG 대신 WARNING으로 변경
         },
-        # 'file' 핸들러 제거
     },
     'loggers': {
         'django': {
             'handlers': ['console'],
-            'level': 'DEBUG',
+            'level': 'WARNING',  # DEBUG 대신 WARNING으로 변경
             'propagate': True,
         },
-        # 다른 loggers 설정도 필요할 경우 추가할 수 있음
     },
 }
+
+
 
 
 
