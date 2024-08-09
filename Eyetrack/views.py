@@ -55,8 +55,8 @@ class SignedURLView(APIView):
                 signed_url = generate_signed_url(bucket_name, blob_name)
                 key = f"{user_id}_{interview_id}"
                 if key not in gaze_sessions:
-                    # GazeTrackingSession이 video_url을 처리할 수 있도록 초기화
-                    gaze_sessions[key] = GazeTrackingSession(video_url=signed_url)
+                    gaze_sessions[key] = GazeTrackingSession()
+                    gaze_sessions[key].video_url = signed_url  # video_url을 세션 객체의 속성으로 별도 저장
                 return JsonResponse({"signed_url": signed_url}, status=200)
             except Exception as e:
                 logger.error(f"서명된 URL 생성 중 오류 발생: {str(e)}")
