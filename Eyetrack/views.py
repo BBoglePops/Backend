@@ -31,7 +31,7 @@ def generate_signed_url(bucket_name, blob_name, expiration=86400):
     client = storage.Client()
     try:
         bucket = client.get_bucket(bucket_name)
-        blob = bucket.blob(blob_name)
+        blob = Blob(blob_name, bucket)
         url = blob.generate_signed_url(
             expiration=datetime.timedelta(seconds=expiration),
             method='PUT'
@@ -55,8 +55,10 @@ class SignedURLView(APIView):
                 signed_url = generate_signed_url(bucket_name, blob_name)
                 key = f"{user_id}_{interview_id}"
                 if key not in gaze_sessions:
-                    gaze_sessions[key] = GazeTrackingSession()
-                    gaze_sessions[key].video_url = signed_url  # video_url을 세션 객체의 속성으로 별도 저장
+                    gaze_sessions[key] = {
+                        "session": GazeTrackingSession(),
+                        "video_url": signed_url
+                    }
                 return JsonResponse({"signed_url": signed_url}, status=200)
             except Exception as e:
                 logger.error(f"서명된 URL 생성 중 오류 발생: {str(e)}")
@@ -80,13 +82,14 @@ def download_video_from_gcs(video_url, local_path):
         raise
 
 # 시선 추적 시작 뷰
+# 시선 추적 시작 뷰
 def start_gaze_tracking_view(request, user_id, interview_id):
     key = f"{user_id}_{interview_id}"
     if key not in gaze_sessions:
         return JsonResponse({"message": "Session not found", "status": "error"}, status=404)
 
-    gaze_session = gaze_sessions[key]
-    video_url = gaze_session.video_url
+    session_info = gaze_sessions[key]
+    video_url = session_info['video_url']
     if not video_url:
         return JsonResponse({"message": "Video URL not found", "status": "error"}, status=404)
 
@@ -95,11 +98,31 @@ def start_gaze_tracking_view(request, user_id, interview_id):
         download_video_from_gcs(video_url, local_video_path)
         video_instance = Video(user_id=user_id, interview_id=interview_id, video_file=local_video_path)
         video_instance.save()
-        gaze_session.start_eye_tracking(local_video_path)
+        session_info['session'].start_eye_tracking(local_video_path)
     except Exception as e:
         return JsonResponse({"message": str(e), "status": "error"}, status=500)
 
     return JsonResponse({"message": "Gaze tracking started", "status": "success"}, status=200)
+# def start_gaze_tracking_view(request, user_id, interview_id):
+#     key = f"{user_id}_{interview_id}"
+#     if key not in gaze_sessions:
+#         return JsonResponse({"message": "Session not found", "status": "error"}, status=404)
+
+#     gaze_session = gaze_sessions[key]
+#     video_url = gaze_session.video_url
+#     if not video_url:
+#         return JsonResponse({"message": "Video URL not found", "status": "error"}, status=404)
+
+#     local_video_path = os.path.join(settings.MEDIA_ROOT, f"{user_id}_{interview_id}.webm")
+#     try:
+#         download_video_from_gcs(video_url, local_video_path)
+#         video_instance = Video(user_id=user_id, interview_id=interview_id, video_file=local_video_path)
+#         video_instance.save()
+#         gaze_session.start_eye_tracking(local_video_path)
+#     except Exception as e:
+#         return JsonResponse({"message": str(e), "status": "error"}, status=500)
+
+#     return JsonResponse({"message": "Gaze tracking started", "status": "success"}, status=200)
 
 
 def apply_gradient(center, radius, color, image, text=None):
@@ -179,12 +202,49 @@ def draw_heatmap(image, section_counts):
 #         "status": "success"
 #     }, status=200)
 
+# def stop_gaze_tracking_view(request, user_id, interview_id):
+#     key = f"{user_id}_{interview_id}"
+#     if key not in gaze_sessions:
+#         return JsonResponse({"message": "Session not found", "status": "error"}, status=404)
+    
+#     gaze_session = gaze_sessions[key]
+#     csv_filename = gaze_session.stop_eye_tracking()
+#     section_data = pd.read_csv(csv_filename)
+#     section_counts = dict(zip(section_data["Section"], section_data["Count"]))
+#     image_path = os.path.join(settings.BASE_DIR, "Eyetrack", "0518", "image.png")
+#     original_image = cv2.imread(image_path)
+#     if original_image is None:
+#         return JsonResponse({"message": "Image not found", "status": "error"}, status=404)
+    
+#     heatmap_image = original_image.copy()
+#     draw_heatmap(heatmap_image, section_counts)
+#     _, buffer = cv2.imencode('.png', heatmap_image)
+#     encoded_image_string = base64.b64encode(buffer).decode('utf-8')
+#     feedback = get_feedback(section_counts)
+#     gaze_tracking_result = GazeTrackingResult.objects.create(
+#         user_id=user_id,
+#         interview_id=interview_id,
+#         encoded_image=encoded_image_string,
+#         feedback=feedback
+#     )
+#     local_video_path = os.path.join(settings.MEDIA_ROOT, f"{user_id}_{interview_id}.webm")
+#     if os.path.exists(local_video_path):
+#         os.remove(local_video_path)
+#     del gaze_sessions[key]
+#     return JsonResponse({
+#         "message": "Gaze tracking stopped",
+#         "image_data": gaze_tracking_result.encoded_image,
+#         "feedback": feedback,
+#         "status": "success"
+#     }, status=200)
+
 def stop_gaze_tracking_view(request, user_id, interview_id):
     key = f"{user_id}_{interview_id}"
     if key not in gaze_sessions:
         return JsonResponse({"message": "Session not found", "status": "error"}, status=404)
     
-    gaze_session = gaze_sessions[key]
+    session_info = gaze_sessions[key]
+    gaze_session = session_info['session']
     csv_filename = gaze_session.stop_eye_tracking()
     section_data = pd.read_csv(csv_filename)
     section_counts = dict(zip(section_data["Section"], section_data["Count"]))
@@ -214,8 +274,6 @@ def stop_gaze_tracking_view(request, user_id, interview_id):
         "feedback": feedback,
         "status": "success"
     }, status=200)
-
-
 
 # def upload_video_to_gcs(file_obj, bucket_name, destination_blob_name):
 #     client = storage.Client()
